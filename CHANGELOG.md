@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026.07.03] - 2026-07-03
+
+### ✨ Added
+- **Supercode** — Added `llm4free/llm/supercode.py`, a new unified LLM gateway. Loads auth from `~/.better-auth/token.json` by default, with explicit `api_key` override. Supports streaming and non-streaming chat, provider-prefixed models (e.g. `concentrateai/deepseek-v4-flash`), and OpenAI-compatible responses. `__init__.py` updated to export `Supercode`.
+
 ## [2026.06.19] - 2026-06-19
 
 ### ✨ Added

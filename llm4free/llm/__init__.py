@@ -54,6 +54,7 @@ from llm4free.llm.netwrck import Netwrck
 from llm4free.llm.ollama_swarm import OllamaSwarm
 from llm4free.llm.opera_aria import OperaAria
 from llm4free.llm.pi import PiAI
+from llm4free.llm.supercode import Supercode
 from llm4free.llm.toolbaz import Toolbaz
 from llm4free.llm.turboseek import TurboSeek
 from llm4free.llm.typliai import TypliAI
@@ -114,6 +115,7 @@ __all__ = [
     "FreeAI",
     "TurboSeek",
     "PiAI",
+    "Supercode",
     "TogetherAI",
     "TwoAI",
     "AI4Chat",
