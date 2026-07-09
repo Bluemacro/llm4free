@@ -7,6 +7,7 @@ from .duckduckgo_main import DuckDuckGoSearch
 
 # Import new search engines
 from .engines.mojeek import Mojeek
+from .engines.serpbase import SerpBase
 from .engines.wikipedia import Wikipedia
 
 # Import result models
@@ -30,6 +31,7 @@ __all__ = [
     "YahooSearch",
     # Individual engines
     "Mojeek",
+    "SerpBase",
     "Wikipedia",
     # Result models
     "TextResult",
