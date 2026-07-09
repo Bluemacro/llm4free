@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026.07.09] - 2026-07-09
+
+### ✨ Added
+- **SerpBase (Google)** — New search engine providing Google results via the SerpBase REST API. Requires `SERPBASE_API_KEY`; get a free key at https://serpbase.dev. Added `llm4free/search/engines/serpbase.py`, exported `SerpBase` from `llm4free/search/__init__.py`, and registered it in the engine `ENGINES` mapping.
+- Added `required_auth: bool = False` to `BaseSearchEngine` (`llm4free/search/base.py`) and set `required_auth = True` on `SerpBase`, aligning search-engine auth metadata with the LLM provider pattern.
+- Added search provider registry helpers in `llm4free/search/__init__.py`: `SEARCH_PROVIDERS`, `SEARCH_AUTH_REQUIRED`, and `_get_available_search_engines(api_key)`.
+- Added `tests/search/test_serpbase.py` covering metadata, required-auth behavior, registry presence, keyed availability filtering, and error handling.
+
+### 🚚 Moved
+- **SerpBase integration** — Wired into `llm4free/cli.py` and `llm4free/search/engines/__init__.py` as a first-class text search option.
+
 ## [2026.07.03] - 2026-07-03
 
 ### ✨ Added

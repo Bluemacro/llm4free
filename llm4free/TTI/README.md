@@ -21,6 +21,7 @@ These providers allow you to easily generate AI‑created art from text prompts 
 | `MagicHourAI`     | `general`, `photorealistic`, `anime`           | Working   |
 | `PollinationsAI`  | `flux`, `flux-pro`, `turbo`, `gptimage`   | Working   |
 | `MagicStudioAI`   | `magicstudio`                             | Working   |
+| `StableHordeAI`   | 154+ crowd-sourced models                   | Working   |
 | `TogetherImage`   | `flux.1-schnell`, `flux.1-pro`            | Working*  |
 
 \* Requires authentication (Bing cookies or API keys).
@@ -107,6 +108,11 @@ print(response.data[0].url)
 
 ### MagicStudioAI
 - Generates images through MagicStudio's public endpoint.
+
+### StableHordeAI
+- Generates images via the distributed AI Horde cluster.
+- Works without authentication; anonymous users share kudos as payment.
+- Dynamically lists 154+ available models.
 
 ### TogetherImage
 - High-quality image generation via Together.xyz API (Requires API Key).

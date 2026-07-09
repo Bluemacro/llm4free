@@ -17,6 +17,7 @@ from llm4free.TTI.onefreeai import OneFreeAI
 from llm4free.TTI.perchance import PerchanceAI
 from llm4free.TTI.pollinations import PollinationsAI
 from llm4free.TTI.raphael import RaphaelAI
+from llm4free.TTI.stablehorde import StableHordeAI
 from llm4free.TTI.together import TogetherImage
 
 # Utility classes
@@ -42,6 +43,7 @@ __all__ = [
     "OneFreeAI",
     "PollinationsAI",
     "RaphaelAI",
+    "StableHordeAI",
     "TogetherImage",
     "MiragicAI",
     "PerchanceAI",

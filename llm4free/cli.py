@@ -13,6 +13,7 @@ from .search import (
     BraveSearch,
     DuckDuckGoSearch,
     Mojeek,
+    SerpBase,
     Wikipedia,
     YahooSearch,
 )
@@ -30,6 +31,7 @@ ENGINES: Dict[str, Union[Type[BaseSearch], Type[BaseSearchEngine]]] = {
     "brave": BraveSearch,
     "mojeek": Mojeek,
     "wikipedia": Wikipedia,
+    "serpbase": SerpBase,
 }
 
 

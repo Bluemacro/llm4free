@@ -32,6 +32,7 @@ class SerpBase(BaseSearchEngine[TextResult]):
     name = "serpbase"
     category = "text"
     provider = "google"
+    required_auth = True
 
     search_url = API_URL
     search_method = "GET"
@@ -76,11 +77,10 @@ class SerpBase(BaseSearchEngine[TextResult]):
         in an empty list rather than raising.
         """
         if not self._api_key:
-            logger.warning(
-                "SERPBASE_API_KEY not set — skipping SerpBase. "
+            raise RuntimeError(
+                "SerpBase requires SERPBASE_API_KEY to be set. "
                 "Get a free key at https://serpbase.dev"
             )
-            return []
 
         num = kwargs.pop("num", 10)
         params: dict[str, Any] = {

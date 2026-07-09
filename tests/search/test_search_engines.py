@@ -70,6 +70,31 @@ class TestDuckDuckGo:
         results = ddg.translate("hello", from_lang="en", to_lang="es")
         assert isinstance(results, list)
 
+    @live_test
+    def test_images_search(self):
+        """Test DuckDuckGo images search."""
+        ddg = DuckDuckGoSearch()
+        results = ddg.images("python logo", max_results=2)
+        assert isinstance(results, list)
+        if len(results) >= 1:
+            assert hasattr(results[0], "image")
+            assert hasattr(results[0], "url")
+
+    @live_test
+    def test_maps_search(self):
+        """Test DuckDuckGo maps search."""
+        ddg = DuckDuckGoSearch()
+        results = ddg.maps("restaurant", city="New York", max_results=2)
+        assert isinstance(results, list)
+
+    @live_test
+    def test_weather(self):
+        """Test DuckDuckGo weather."""
+        ddg = DuckDuckGoSearch()
+        results = ddg.weather("New York")
+        assert isinstance(results, dict)
+        assert "location" in results
+
 
 class TestBing:
     """Tests for Bing search engine."""
@@ -180,6 +205,34 @@ class TestYahoo:
         """Test Yahoo suggestions."""
         yahoo = YahooSearch()
         results = yahoo.suggestions("python")
+        assert isinstance(results, list)
+
+    @live_test
+    def test_answers(self):
+        """Test Yahoo instant answers."""
+        yahoo = YahooSearch()
+        results = yahoo.answers("what is python")
+        assert isinstance(results, list)
+
+    @live_test
+    def test_maps_search(self):
+        """Test Yahoo maps search."""
+        yahoo = YahooSearch()
+        results = yahoo.maps("restaurant", city="New York", max_results=2)
+        assert isinstance(results, list)
+
+    @live_test
+    def test_translate(self):
+        """Test Yahoo translation."""
+        yahoo = YahooSearch()
+        results = yahoo.translate("hello", to_lang="es")
+        assert isinstance(results, list)
+
+    @live_test
+    def test_weather(self):
+        """Test Yahoo weather."""
+        yahoo = YahooSearch()
+        results = yahoo.weather("New York")
         assert isinstance(results, list)
 
 
