@@ -25,6 +25,7 @@ from .duckduckgo import (
     DuckDuckGoWeather,
 )
 from .mojeek import Mojeek
+from .serpbase import SerpBase
 from .wikipedia import Wikipedia
 from .yahoo import (
     YahooImages,
@@ -40,6 +41,7 @@ ENGINES = {
     "text": {
         "brave": BraveTextSearch,
         "mojeek": Mojeek,
+        "serpbase": SerpBase,
         "bing": BingTextSearch,
         "duckduckgo": DuckDuckGoTextSearch,
         "yahoo": YahooText,
@@ -89,6 +91,7 @@ __all__ = [
     "BraveNews",
     "BraveSuggestions",
     "Mojeek",
+    "SerpBase",
     "Wikipedia",
     "BingBase",
     "BingTextSearch",
