@@ -339,6 +339,32 @@ class KittenTTS(BaseTTSProvider):
         """
         return self.SUPPORTED_VOICES.copy()
 
+    def create_speech(
+        self,
+        input_text: str,
+        model: Optional[str] = None,
+        voice: Optional[str] = None,
+        response_format: Optional[str] = None,
+        instructions: Optional[str] = None,
+        verbose: bool = False,
+        **kwargs: Any,
+    ) -> str:
+        """
+        Create speech from input text (OpenAI-compatible interface).
+
+        KittenTTS supports preset voice names and custom speed,
+        so we bypass base validation here to avoid rejecting
+        provider-specific voices.
+        """
+        return self.tts(
+            text=input_text,
+            voice=voice or self.default_voice,
+            model=model or self.default_model,
+            response_format=response_format or self.default_format,
+            speed=kwargs.get("speed", self.default_speed),
+            verbose=verbose,
+        )
+
 
 if __name__ == "__main__":
     # Example usage

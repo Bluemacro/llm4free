@@ -26,7 +26,6 @@ LLM4Free's TTS Providers offer a versatile and powerful text-to-speech conversio
 7. **QwenTTS**
 8. **SherpaTTS**
 9. **PocketTTS**
-10. **FasterQwen3TTS**
 ## 🚀 Installation
 
 ```bash

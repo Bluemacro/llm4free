@@ -94,8 +94,8 @@ class TTSAI(BaseTTSProvider):
         self.default_voice = "en_GB-alan-medium"
         self.default_format = "wav"
 
-        self.api_url = "https://tts.ai/api/v1/tts"
-        self.voices_url = "https://tts.ai/api/v1/voices"
+        self.api_url = "https://tts.ai/api/v1/tts/"
+        self.voices_url = "https://tts.ai/api/v1/voices/"
         self.session = requests.Session()
         self.session.headers.update(self.headers)
         if proxies:
@@ -231,7 +231,7 @@ class TTSAI(BaseTTSProvider):
                                 )
 
                     # Get audio URL
-                    audio_url = result.get("audio_url")
+                    audio_url = result.get("result_url") or result.get("audio_url")
                     if not audio_url:
                         audio_url = result.get("url")
                         if not audio_url:
@@ -312,6 +312,8 @@ class TTSAI(BaseTTSProvider):
         return self.tts(
             text=input_text,
             voice=voice or self.default_voice,
+            model=model or self.default_model,
+            response_format=response_format or self.default_format,
             verbose=verbose,
         )
 

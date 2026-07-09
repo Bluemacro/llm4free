@@ -9,9 +9,19 @@ All notable changes to this project will be documented in this file.
 - Added `required_auth: bool = False` to `BaseSearchEngine` (`llm4free/search/base.py`) and set `required_auth = True` on `SerpBase`, aligning search-engine auth metadata with the LLM provider pattern.
 - Added search provider registry helpers in `llm4free/search/__init__.py`: `SEARCH_PROVIDERS`, `SEARCH_AUTH_REQUIRED`, and `_get_available_search_engines(api_key)`.
 - Added `tests/search/test_serpbase.py` covering metadata, required-auth behavior, registry presence, keyed availability filtering, and error handling.
+- Added `tests/test_tts_live.py` — live TTS provider test harness that exercises real endpoints and reports audio-generation status.
 
 ### 🚚 Moved
 - **SerpBase integration** — Wired into `llm4free/cli.py` and `llm4free/search/engines/__init__.py` as a first-class text search option.
+
+### 🐛 Fixed
+- **LuxTTS** — `create_speech()` now works by adding `SUPPORTED_VOICES` and updating `validate_voice()` to accept preset names plus direct audio URLs. Previously the base class rejected LuxTTS's own `"default"` voice.
+- **SherpaTTS** — Rewrote against the current `k2-fsa-text-to-speech.hf.space` config: updated supported models to the currently available voice-cloning entries, switched queue calls to `process` / `process_voice_clone`, and hardened SSE result parsing. `create_speech()` now succeeds.
+- **TTS.ai** — Fixed endpoints to trailing-slash form, corrected `result_url` extraction from the API response, and updated `create_speech()` so it forwards `model` / `response_format` instead of silently dropping them.
+- **KittenTTS** — Added a `create_speech()` override so provider-specific voices like `Jasper` are accepted without the base validator rejecting them.
+
+### 🗑️ Removed
+- **FasterQwen3TTS** — Deleted provider. The HuggingFace demo now returns 401 / “Sign in with Hugging Face to use this demo.”, so the endpoint is no longer usable without auth. Removed `llm4free/TTS/faster_qwen3.py`, exports from `llm4free/TTS/__init__.py`, README reference, changelog entries, and test references.
 
 ## [2026.07.03] - 2026-07-03
 
@@ -227,18 +237,6 @@ All notable changes to this project will be documented in this file.
   - Updated `llm4free/Provider/STT/__init__.py` to export CohereSTT
   - Updated Provider.md documentation
 
-- **Faster Qwen3-TTS Provider**: Added new Faster Qwen3-TTS provider for text-to-speech synthesis:
-  - `llm4free/Provider/TTS/faster_qwen3.py` - OpenAI TTS API-compatible interface for Faster Qwen3-TTS
-  - Supports 5 model variants: Base (0.6B, 1.7B), CustomVoice (0.6B, 1.7B), VoiceDesign (1.7B)
-  - Three generation modes: voice cloning, custom voice, voice design
-  - Streaming (SSE) and non-streaming generation modes
-  - Preset reference voices and custom reference audio upload
-  - Audio transcription support via nano-parakeet
-  - 6 languages: English, Chinese, French, German, Spanish, Auto
-  - No authentication required (public Hugging Face Space)
-  - Updated `llm4free/Provider/TTS/__init__.py` to export FasterQwen3TTS
-  - Updated Provider.md documentation
-
 ### 🔧 Fixed
 - **Client type checking**: Fixed `Attribute content may be missing` type errors in `llm4free/client.py`:
   - Added `TypeGuard` import and updated `_is_valid_chat_completion` to use proper type narrowing
@@ -254,7 +252,6 @@ All notable changes to this project will be documented in this file.
   - The FreeTTS API returns redirect URLs for audio files that were not being followed
   - Provider now successfully downloads and saves audio files
 - **PocketTTS**: Fixed test configuration to use valid voice name (`alba` instead of invalid voice)
-- **FasterQwen3TTS**: Fixed model loading to handle `already_loaded` status from API
 - **TTS Provider Tests**: Added comprehensive test suite for all TTS providers:
   - `tests/providers/test_all_tts_providers.py` - Instantiation and attribute tests
   - `tests/providers/test_tts_audio_generation.py` - Actual audio generation tests

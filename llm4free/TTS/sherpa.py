@@ -31,9 +31,8 @@ class SherpaTTS(BaseTTSProvider):
     Text-to-speech provider using the Next-gen Kaldi (Sherpa-ONNX) API.
 
     This provider follows the OpenAI TTS API structure with support for:
-    - 50+ languages including English, Chinese, Cantonese, Arabic, French, etc.
-    - Multiple ONNX-based models (Kokoro, Piper, Coqui, etc.)
-    - Speaker ID and Speed control
+    - Voice cloning via Pocket TTS and ZipVoice models
+    - Reference audio from URL or uploaded file
     - Multiple output formats
     """
 
@@ -48,60 +47,14 @@ class SherpaTTS(BaseTTSProvider):
         "referer": f"{BASE_URL}/",
     }
 
+    # Current supported models (as of latest space revision)
     SUPPORTED_MODELS = [
-        "csukuangfj/kokoro-en-v0_19|11 speakers",
-        "csukuangfj/kitten-kitten-en-v0_1-fp16|8 speakers",
-        "csukuangfj/kitten-nano-en-v0_2-fp16|8 speakers",
-        "csukuangfj/kitten-nano-en-v0_1-fp16|8 speakers",
-        "csukuangfj/vits-piper-en_US-glados-high|1 speaker",
-        "csukuangfj/vits-piper-en_US-glados|1 speaker",
-        "csukuangfj/vits-piper-en_GB-southern_english_male-medium|8 speakers",
-        "csukuangfj/vits-piper-en_GB-southern_english_female-medium|6 speakers",
-        "csukuangfj/vits-piper-en_US-bryce-medium|1 speaker",
-        "csukuangfj/vits-piper-en_US-john-medium|1 speaker",
-        "csukuangfj/vits-piper-en_US-norman-medium|1 speaker",
-        "csukuangfj/vits-piper-en_US-miro-high|1 speaker",
-        "csukuangfj/vits-coqui-en-ljspeech|1 speaker",
-        "csukuangfj/vits-coqui-en-ljspeech-neon|1 speaker",
-        "csukuangfj/vits-coqui-en-vctk|109 speakers",
-        "csukuangfj/vits-piper-en_GB-miro-high|1 speaker",
-        "csukuangfj/vits-piper-en_GB-dii-high|1 speaker",
-        "csukuangfj/vits-piper-en_GB-sweetbbak-amy|1 speaker",
-        "csukuangfj/vits-piper-en_US-amy-low|1 speaker",
-        "csukuangfj/vits-piper-en_US-amy-medium|1 speaker",
-        "csukuangfj/vits-piper-en_US-arctic-medium|18 speakers",
-        "csukuangfj/vits-piper-en_US-danny-low|1 speaker",
-        "csukuangfj/vits-piper-en_US-hfc_male-medium|1 speaker",
-        "csukuangfj/vits-piper-en_US-hfc_female-medium|1 speaker",
-        "csukuangfj/vits-piper-en_US-joe-medium|1 speaker",
-        "csukuangfj/vits-piper-en_US-kathleen-low|1 speaker",
-        "csukuangfj/vits-piper-en_US-kusal-medium|1 speaker",
-        "csukuangfj/vits-piper-en_US-l2arctic-medium|24 speakers",
-        "csukuangfj/vits-piper-en_US-lessac-high|1 speaker",
-        "csukuangfj/vits-piper-en_US-lessac-low|1 speaker",
-        "csukuangfj/vits-piper-en_US-lessac-medium|1 speaker",
-        "csukuangfj/vits-piper-en_US-libritts-high|904 speakers",
-        "csukuangfj/vits-piper-en_US-libritts_r-medium|904 speakers",
-        "csukuangfj/vits-piper-en_US-ljspeech-high|1 speaker",
-        "csukuangfj/vits-piper-en_US-ljspeech-medium|1 speaker",
-        "csukuangfj/vits-piper-en_US-ryan-high|1 speaker",
-        "csukuangfj/vits-piper-en_US-ryan-low|1 speaker",
-        "csukuangfj/vits-piper-en_US-ryan-medium|1 speaker",
-        "csukuangfj/vits-piper-en_GB-alan-low|1 speaker",
-        "csukuangfj/vits-piper-en_GB-alan-medium|1 speaker",
-        "csukuangfj/vits-piper-en_GB-alan-medium",
-        "csukuangfj/vits-piper-en_GB-cori-high|1 speaker",
-        "csukuangfj/vits-piper-en_GB-cori-medium|1 speaker",
-        "csukuangfj/vits-piper-en_GB-jenny_dioco-medium|1 speaker",
-        "csukuangfj/vits-piper-en_GB-northern_english_male-medium|1 speaker",
-        "csukuangfj/vits-piper-en_GB-semaine-medium|4 speakers",
-        "csukuangfj/vits-piper-en_GB-southern_english_female-low|1 speaker",
-        "csukuangfj/vits-piper-en_GB-vctk-medium|109 speakers",
-        "csukuangfj/vits-vctk|109 speakers",
-        "csukuangfj/vits-ljs|1 speaker",
+        "csukuangfj2/sherpa-onnx-pocket-tts-int8-2026-01-26|voice cloning",
+        "sherpa-onnx-zipvoice-distill-int8-zh-en-emilia|Chinese+English voice cloning",
     ]
 
     LANGUAGES = [
+        "Voice Cloning (声音克隆)",
         "English",
         "Chinese (Mandarin, 普通话)",
         "Chinese+English",
@@ -130,8 +83,10 @@ class SherpaTTS(BaseTTSProvider):
         "Indonesian",
         "Irish",
         "Italian",
+        "Japanese",
         "Kazakh",
         "Korean",
+        "Kurdish",
         "Latvian",
         "Lithuanian",
         "Luxembourgish",
@@ -157,6 +112,10 @@ class SherpaTTS(BaseTTSProvider):
         "Welsh",
     ]
 
+    # API function indices from current space config
+    PROCESS_FN_INDEX = 10
+    PROCESS_VOICE_CLONE_FN_INDEX = 11
+
     def __init__(self, timeout: int = 60, proxy: Optional[str] = None):
         """
         Initialize the SherpaTTS client.
@@ -164,27 +123,43 @@ class SherpaTTS(BaseTTSProvider):
         super().__init__()
         self.timeout = timeout
         self.proxy = proxy
-        self.default_language = "English"
-        self.default_model_choice = "csukuangfj/kokoro-en-v0_19|11 speakers"
+        self.default_language = "Voice Cloning (声音克隆)"
+        self.default_model_choice = "csukuangfj2/sherpa-onnx-pocket-tts-int8-2026-01-26|voice cloning"
 
     def _generate_session_hash(self) -> str:
         return "".join(random.choices(string.ascii_lowercase + string.digits, k=11))
 
-    def tts(self, text: str, voice: Optional[str] = None, verbose: bool = False, **kwargs) -> str:
+    def tts(
+        self,
+        text: str,
+        voice: Optional[str] = None,
+        verbose: bool = False,
+        **kwargs,
+    ) -> str:
         """
         Convert text to speech using Sherpa-ONNX API.
 
         Args:
             text: Input text
-            **kwargs: Additional parameters (language, model_choice, speaker_id, speed, response_format, verbose)
+            voice: Ignored here; SherpaTTS is driven by model choice and optional reference audio.
+            verbose: Whether to print debug information.
+            **kwargs: Additional parameters:
+                - model_choice (str): Current supported voice cloning model.
+                - language (str): Language selection. Defaults to Voice Cloning.
+                - speaker_id (str): Speaker id. Defaults to "0".
+                - speed (float): Speed factor. Defaults to 1.0.
+                - response_format (str): Audio format. Defaults to "wav".
+                - reference_audio_url (str): Optional reference audio url for voice cloning.
+                - reference_text (str): Transcript of reference audio.
         """
-        # Extract parameters from kwargs with defaults
-        language = kwargs.get("language", "English")
-        model_choice = kwargs.get("model_choice", "csukuangfj/kokoro-en-v0_19|11 speakers")
+        language = kwargs.get("language", "Voice Cloning (声音克隆)")
+        model_choice = kwargs.get("model_choice", self.default_model_choice)
         speaker_id = kwargs.get("speaker_id", "0")
         speed = kwargs.get("speed", 1.0)
         response_format = kwargs.get("response_format", "wav")
-        verbose = kwargs.get("verbose", True)
+        reference_audio_url = kwargs.get("reference_audio_url")
+        reference_text = kwargs.get("reference_text", text)
+
         if not text:
             raise ValueError("Input text must be a non-empty string")
 
@@ -207,20 +182,36 @@ class SherpaTTS(BaseTTSProvider):
 
         try:
             with cf_requests.Session(**client_kwargs) as client:
-                # Step 1: Join the queue
-                join_url = f"{self.BASE_URL}/gradio_api/queue/join?"
+                # Voice cloning models require reference audio.
+                if reference_audio_url:
+                    fn_index = self.PROCESS_VOICE_CLONE_FN_INDEX
+                    data = [
+                        language,
+                        model_choice,
+                        text,
+                        speaker_id,
+                        speed,
+                        None,
+                        None,
+                        reference_audio_url,
+                        reference_text,
+                    ]
+                else:
+                    fn_index = self.PROCESS_FN_INDEX
+                    data = [language, model_choice, text, speaker_id, speed]
+
                 payload = {
-                    "data": [language, model_choice, text, speaker_id, speed],
+                    "data": data,
                     "event_data": None,
-                    "fn_index": 1,
+                    "fn_index": fn_index,
                     "trigger_id": 9,
                     "session_hash": session_hash,
                 }
 
+                join_url = f"{self.BASE_URL}/gradio_api/queue/join?"
                 response = client.post(join_url, json=payload)
                 response.raise_for_status()
 
-                # Step 2: Poll for data
                 data_url = f"{self.BASE_URL}/gradio_api/queue/data?session_hash={session_hash}"
                 audio_url = None
 
@@ -238,20 +229,17 @@ class SherpaTTS(BaseTTSProvider):
 
                             msg = data.get("msg")
                             if msg == "process_completed":
+                                output = data.get("output") or {}
                                 if data.get("success"):
-                                    output_data = data.get("output", {}).get("data", [])
+                                    output_data = output.get("data") or []
                                     if output_data:
                                         audio_info = output_data[0]
-                                        path = (
-                                            audio_info["path"]
-                                            if isinstance(audio_info, dict)
-                                            else audio_info
-                                        )
-                                        audio_url = f"{self.BASE_URL}/gradio_api/file={path}"
+                                        if isinstance(audio_info, dict):
+                                            audio_url = audio_info.get("url") or audio_info.get("path")
                                     break
                                 else:
                                     raise exceptions.FailedToGenerateResponseError(
-                                        f"Generation failed: {data}"
+                                        f"Generation failed: {output}"
                                     )
                             elif msg == "queue_full":
                                 raise exceptions.FailedToGenerateResponseError("Queue is full")
@@ -261,7 +249,9 @@ class SherpaTTS(BaseTTSProvider):
                         "Failed to get audio URL from stream"
                     )
 
-                # Step 3: Download the audio file
+                if audio_url.startswith("/"):
+                    audio_url = f"{self.BASE_URL}{audio_url}"
+
                 audio_response = client.get(audio_url)
                 audio_response.raise_for_status()
 
@@ -283,11 +273,12 @@ class SherpaTTS(BaseTTSProvider):
     def create_speech(
         self,
         input_text: str,
-        model: Optional[str] = "csukuangfj/kokoro-en-v0_19|11 speakers",
+        model: Optional[str] = "csukuangfj2/sherpa-onnx-pocket-tts-int8-2026-01-26|voice cloning",
         voice: Optional[str] = None,
-        response_format: Optional[str] = "mp3",
+        response_format: Optional[str] = "wav",
         instructions: Optional[str] = None,
         verbose: bool = False,
+        **kwargs: Any,
     ) -> str:
         """
         OpenAI-compatible speech creation interface.
@@ -295,20 +286,30 @@ class SherpaTTS(BaseTTSProvider):
         Args:
             input_text (str): The text to convert to speech
             model (str): The TTS model to use
-            voice (str): The voice to use (not used by SherpaAI directly)
+            voice (str): Ignored for SherpaTTS
             response_format (str): Audio format
             instructions (str): Voice instructions
             verbose (bool): Whether to print debug information
+            **kwargs: Additional parameters:
+                - language (str): Language selection.
+                - speaker_id (str): Speaker id.
+                - speed (float): Speed factor.
+                - reference_audio_url (str): Optional reference audio url for voice cloning.
+                - reference_text (str): Transcript of reference audio.
 
         Returns:
             str: Path to the generated audio file
         """
-        model_choice = model or "csukuangfj/kokoro-en-v0_19|11 speakers"
+        merge = {}
+        if instructions:
+            merge["reference_text"] = instructions
+        merge.update(kwargs)
         return self.tts(
             text=input_text,
-            model_choice=model_choice,
-            response_format=response_format or "mp3",
+            model_choice=model or self.default_model_choice,
+            response_format=response_format or "wav",
             verbose=verbose,
+            **merge,
         )
 
     def with_streaming_response(self):
@@ -354,7 +355,14 @@ class StreamingResponse:
 if __name__ == "__main__":
     tts = SherpaTTS()
     try:
-        path = tts.tts("This is a Sherpa-ONNX test.", verbose=True)
+        path = tts.tts(
+            "This is a Sherpa-ONNX test.",
+            verbose=True,
+            language="Voice Cloning (声音克隆)",
+            model_choice="csukuangfj2/sherpa-onnx-pocket-tts-int8-2026-01-26|voice cloning",
+            reference_audio_url="https://github.com/gradio-app/gradio/raw/main/test/test_files/audio_sample.wav",
+            reference_text="This is reference audio text.",
+        )
         ic.configureOutput(prefix="INFO| ")
         ic(f"Result: {path}")
     except Exception as e:

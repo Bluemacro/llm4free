@@ -10,7 +10,6 @@ from llm4free.TTS.base import (
 # Provider implementations
 from llm4free.TTS.deepgram import DeepgramTTS
 from llm4free.TTS.elevenlabs import ElevenlabsTTS
-from llm4free.TTS.faster_qwen3 import FasterQwen3TTS
 from llm4free.TTS.kittentts import KittenTTS
 from llm4free.TTS.luxtts import LuxTTS
 from llm4free.TTS.murfai import MurfAITTS
@@ -36,7 +35,6 @@ __all__ = [
     # Providers
     "DeepgramTTS",
     "ElevenlabsTTS",
-    "FasterQwen3TTS",
     "KittenTTS",
     "LuxTTS",
     "MurfAITTS",

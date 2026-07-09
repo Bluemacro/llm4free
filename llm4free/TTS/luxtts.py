@@ -53,6 +53,9 @@ class LuxTTS(BaseTTSProvider):
         "male_1": "https://github.com/gradio-app/gradio/raw/main/test/test_files/audio_sample.wav",
     }
 
+    # Supported voices (preset names; urls are also accepted)
+    SUPPORTED_VOICES = list(PRESET_VOICES.keys())
+
     # Supported formats
     SUPPORTED_FORMATS = ["wav", "mp3"]
 
@@ -101,6 +104,69 @@ class LuxTTS(BaseTTSProvider):
         self.default_num_steps = 4  # Number of steps (1-10)
         self.default_speed = 0.8  # Speed (0.5-2.0)
         self.default_return_smooth = False  # Return smooth audio
+
+    def validate_model(self, model: str) -> str:
+        """
+        Validate and return the model name.
+
+        Args:
+            model (str): Model name to validate
+
+        Returns:
+            str: Validated model name
+
+        Raises:
+            ValueError: If model is not supported
+        """
+        if self.SUPPORTED_MODELS is None:
+            return model
+        if model not in self.SUPPORTED_MODELS:
+            raise ValueError(
+                f"Model '{model}' not supported. Available models: {', '.join(self.SUPPORTED_MODELS)}"
+            )
+        return model
+
+    def validate_voice(self, voice: str) -> str:
+        """
+        Validate and return the voice name.
+
+        LuxTTS voices are either preset names or direct audio URLs.
+
+        Args:
+            voice (str): Voice name to validate
+
+        Returns:
+            str: Validated voice name
+
+        Raises:
+            ValueError: If voice is not supported
+        """
+        if voice in self.PRESET_VOICES:
+            return voice
+        if isinstance(voice, str) and voice.startswith(("http://", "https://")):
+            return voice
+        raise ValueError(
+            f"Voice '{voice}' not supported. Available voices: {', '.join(self.SUPPORTED_VOICES)}"
+        )
+
+    def validate_format(self, response_format: str) -> str:
+        """
+        Validate and return the response format.
+
+        Args:
+            response_format (str): Format to validate
+
+        Returns:
+            str: Validated format
+
+        Raises:
+            ValueError: If format is not supported
+        """
+        if response_format not in self.SUPPORTED_FORMATS:
+            raise ValueError(
+                f"Format '{response_format}' not supported. Available formats: {', '.join(self.SUPPORTED_FORMATS)}"
+            )
+        return response_format
 
     def tts(
         self,

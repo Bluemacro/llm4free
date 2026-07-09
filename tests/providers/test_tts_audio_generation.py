@@ -10,7 +10,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from llm4free.TTS import (
     DeepgramTTS,
     ElevenlabsTTS,
-    FasterQwen3TTS,
     MurfAITTS,
     OpenAIFMTTS,
     ParlerTTS,
@@ -26,7 +25,6 @@ def _make_provider(name: str):
     cls_map = {
         "DeepgramTTS": DeepgramTTS,
         "ElevenlabsTTS": ElevenlabsTTS,
-        "FasterQwen3TTS": FasterQwen3TTS,
         "MurfAITTS": MurfAITTS,
         "OpenAIFMTTS": OpenAIFMTTS,
         "ParlerTTS": ParlerTTS,
@@ -48,7 +46,6 @@ def test_audio_generation():
     provider_configs = [
         ("DeepgramTTS", {"text": test_text, "voice": "thalia"}),
         ("ElevenlabsTTS", {"text": test_text, "voice": "brian"}),
-        ("FasterQwen3TTS", {"text": test_text, "mode": "voice_clone", "ref_preset": "ref_audio_3"}),
         ("MurfAITTS", {"text": test_text, "voice": "Hazel"}),
         ("OpenAIFMTTS", {"text": test_text, "voice": "alloy"}),
         ("ParlerTTS", {"text": test_text, "voice": "alloy"}),
