@@ -34,13 +34,13 @@ class YahooImages(YahooSearchEngine[ImagesResult]):
     }
 
     # XPath selectors
-    items_xpath = "//li[contains(@class, 'ld') or contains(@class, 'algo') or contains(@class, 'dd')] | //div[contains(@class, 'img')]"
+    items_xpath = "//li[contains(@class, 'tile') and contains(@class, 'Sr')]"
     elements_xpath: Mapping[str, str] = {
-        "title": ".//@alt | .//@title | .//h3//text()",
-        "image": ".//@src | .//@data-src",
-        "thumbnail": ".//@src",
-        "url": ".//a/@href",
-        "source": ".//span[contains(@class, 'source')]//text() | .//cite//text()",
+        "title": ".//*[contains(@class, 'tile-title')]//text()",
+        "image": ".//@data-origurl",
+        "thumbnail": ".//img/@src",
+        "url": ".//@data-referenceurl",
+        "source": ".//*[contains(@class, 'tile-domain')]//text()",
         "width": "",
         "height": "",
     }
@@ -167,7 +167,7 @@ class YahooImages(YahooSearchEngine[ImagesResult]):
         return payload
 
     def post_extract_results(self, results: list[ImagesResult]) -> list[ImagesResult]:
-        """Post-process image results to parse JSON data.
+        """Post-process image results to clean URLs and metadata.
 
         Args:
             results: Raw extracted results
@@ -175,32 +175,13 @@ class YahooImages(YahooSearchEngine[ImagesResult]):
         Returns:
             Cleaned results with proper URLs and metadata
         """
-        import json
         from urllib.parse import unquote
 
         cleaned_results = []
 
         for result in results:
-            # Parse JSON data from the data attribute
-            if result.title and result.title.startswith("{"):
-                try:
-                    data = json.loads(result.title)
-
-                    # Extract title
-                    result.title = data.get("desc", "") or data.get("tit", "")
-
-                    # Extract URLs
-                    result.url = data.get("rurl", "")
-                    result.thumbnail = data.get("turl", "")
-                    result.image = data.get("turlL", "") or data.get("turl", "")
-
-                    # Extract dimensions
-                    result.width = int(data.get("imgW", 0))
-                    result.height = int(data.get("imgH", 0))
-
-                except (json.JSONDecodeError, KeyError, ValueError):
-                    # If JSON parsing fails, keep original data
-                    pass
+            if not result.image and result.thumbnail:
+                result.image = result.thumbnail
 
             # Clean URLs if they exist
             if result.url:

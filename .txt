@@ -1,41 +1,3 @@
-Here's the consolidated list — 130+ free AI sites, no login required. Compiled from 8 search angles + 3 GitHub awesome-lists + pollinations + zebbern/no-cost-ai + rocnubie's list.
-
----
-
-## 🎨 IMAGE GENERATION (38 sites)
-
-| 20 | Lexica | https://lexica.art | SD search + generate |
-| 21 | RunwayML (Gen-4) | https://runwayml.com | Creative assistant |
-| 22 | Fotor | https://fotor.com | Image editing + AI |
-| 23 | AI Photo Editor | https://bestaiphotoeditor.app | Photo editing AI |
-| 24 | AI Image Editor | https://ai-image-editor.online | img2img editor |
-| 25 | AI Room Design | https://airoom-design.com | Interior design AI |
-| 26 | Nano Banana AI | https://nanobanana-ai.online | Google's Nano Banana Pro |
-| 27 | Flux 2 AI | https://flux-2.online | Flux 2 lineup |
-| 28 | Flux AI Online | https://flux-ai.online | Flux 2 Dev/Pro/Flex/LoRA |
-| 29 | Z-Image | https://z-image.club | Z-Image Turbo |
-| 30 | TinyWow | https://tinywow.com/tools/write | AI image tools |
-| 31 | Imagine Draw AI | https://imaginedraw.ai | Pollinations-based |
-| 32 | ImagineAnything | https://imagineanything.ai | Text-to-image |
-| 33 | PollinationApps | https://pollinations.ai (apps list) | 500+ projects on pollinations |
-| 34 | AI Logo Generator | https://ailogogenerator.net | Free logo gen |
-| 35 | NightCafe | https://creator.nightcafe.studio | Credits system |
-| 36 | AI Dungeon | https://aidungeon.com | Image gen included |
-| 37 | Pollinations AI Playground | https://pollinations.ai/playground | Web playground |
-| 38 | Draw Thing | https://draw.thing.com | Apple-style, free tier |
-
----
-
-## 🔊 TTS / VOICE (22 sites)
-
-| # | Site | URL | Notes |
-|---|---|---|---|
-| 1 | Quick-TTS | https://quick-tts.com | ON-DEVICE Piper/Kokoro. No server |
-| 2 | TTS.ai | https://tts.ai/text-to-speech | Piper, VITS, MeloTTS, 100+ voices |
-| 3 | FreeTextToSpeech | https://freetexttospeech.net | 54 Kokoro voices, WAV, commercial |
-| 4 | AnySpeech | https://anyspeech.io | Google TTS, 40+ langs |
-| 5 | TTS-Free | https://www.tts-free.com | Browser-based, private |
-| 6 | TTSOpen | https://ttsopen.ai | OpenAI.fm alt, no login |
 | 7 | FineVoice | https://finevoice.ai/text-to-speech | 154 languages |
 | 8 | Crikk | https://crikk.com/text-to-speech | 317 voices, 91 langs, 2.5k chars guest |
 | 9 | TextToSpeech.site | https://texttospeech.site | Standard voices unlimited |
@@ -150,20 +112,6 @@ Here's the consolidated list — 130+ free AI sites, no login required. Compiled
 | 4 | Venice | https://venice.ai | Uncensored |
 | 5 | Uncensored.chat | https://uncensored.chat | NSFW-OK |
 
----
-
-## 🎯 KEY INFO
-
-**The single best "everything" backend**: https://pollinations.ai — powers ~500 community apps, free image/video/audio/text, no signup needed for basic use. Image models: flux, gptimage, kontext, seedream, nanobanana, zimage, wan-image, qwen-image, grok-imagine. Text models include openai, claude-sonnet-4.5, claude-opus-4.5, gemini-3-flash, deepseek-v3, kimi-k2.
-
-**Most reliable "no-login" LLM**: Duck.ai — supports GPT-4o mini, Claude 3 Haiku, Llama 3.3 70B, Mistral Small 3. Chats not stored, not used for training.
-
-**GitHub index sources** (for ongoing updates):
-- https://github.com/zebbern/no-cost-ai (80+ services, no signup)
-- https://github.com/rocnubie/Awesome-AI-Websites-2026 (curated 2026 list)
-- https://github.com/T-R-I-T-E-J/awesome-free-ai-resources (290+ tools)
-- https://github.com/aviaryan/awesome-no-login-web-apps (general no-login)
-- https://github.com/OuterSpacee/free-ai-apis (100+ APIs, 15 cats)
 
 https://freechat.org/chat
 https://imagegpt.org/

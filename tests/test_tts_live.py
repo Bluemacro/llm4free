@@ -30,6 +30,7 @@ from llm4free.TTS import (
     SherpaTTS,
     StreamElements,
     TTSAI,
+    TTSOpenTTS,
     XLNKTTS,
 )
 
@@ -137,6 +138,10 @@ def test_provider(provider_name: str, provider_cls, init_kwargs: dict = None) ->
         text = SHORT_TEXT
         kwargs = {"voice": "alba", "verbose": False}
         result["interface"] = "create_speech"
+    elif provider_name == "TTSOpenTTS":
+        text = SHORT_TEXT
+        kwargs = {"voice": "onyx", "response_format": "mp3", "verbose": False}
+        result["interface"] = "create_speech"
 
     # Helper to actually run and check audio
     def _run(provider_obj, call_text, call_kwargs) -> dict:
@@ -225,6 +230,7 @@ def main():
         ("SherpaTTS", SherpaTTS, {}),
         ("StreamElements", StreamElements, {}),
         ("TTSAI", TTSAI, {}),
+        ("TTSOpenTTS", TTSOpenTTS, {}),
         ("XLNKTTS", XLNKTTS, {"timeout": 120}),
     ]
 

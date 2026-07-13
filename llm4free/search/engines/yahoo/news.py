@@ -62,14 +62,16 @@ class YahooNews(YahooSearchEngine[NewsResult]):
     search_method = "GET"
 
     # XPath selectors for news articles
-    items_xpath = "//div[contains(@class, 'NewsArticle') or contains(@class, 'dd') and contains(@class, 'algo')]"
+    items_xpath = (
+        "//div[contains(@class, 'NewsArticle')]"
+    )
     elements_xpath: Mapping[str, str] = {
-        "date": ".//span[contains(@class, 'fc-2nd') or contains(@class, 'age') or contains(@class, 's-time')]//text()",
-        "title": ".//h4//a//text() | .//h3//a//text()",
-        "url": ".//h4//a/@href | .//h3//a/@href",
-        "body": ".//p//text() | .//div[contains(@class, 'compText')]//text()",
-        "image": ".//img/@src",
-        "source": ".//span[contains(@class, 's-source') or contains(@class, 'source')]//text()",
+        "date": ".//span[contains(@class, 's-time')]//text()",
+        "title": ".//h4//text() | .//h3//text()",
+        "url": ".//a[contains(@class, 'thmb')]/@href",
+        "body": ".//p[contains(@class, 's-desc')]//text()",
+        "image": ".//a[contains(@class, 'thmb')]//img/@src",
+        "source": ".//span[contains(@class, 's-source')]//text()",
     }
 
     def build_payload(

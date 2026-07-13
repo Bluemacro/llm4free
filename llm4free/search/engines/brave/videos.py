@@ -188,7 +188,7 @@ class BraveVideos(BraveBase):
         results: list[VideosResult] = []
 
         # Video results are in div.video-snippet containers
-        containers = soup.select("div.video-snippet")
+        containers = soup.select('div.snippet[data-type="videos"]')
 
         for container in containers:
             try:
@@ -210,106 +210,78 @@ class BraveVideos(BraveBase):
         Returns:
             VideosResult object or None if parsing fails.
         """
-        # Get video URL from main link
-        url = ""
-        link_elem = container.select_one("a[href]")
-        if link_elem:
-            url = link_elem.get("href", "").strip()
-
+        # Main video link + thumbnail
+        link_elem = container.select_one("a.thumbnail")
+        url = link_elem.get("href", "").strip() if link_elem else ""
+        if not url:
+            link_elem = container.select_one("a.l1")
+            url = link_elem.get("href", "").strip() if link_elem else ""
         if not url:
             return None
 
-        # Get thumbnail
         thumbnail = ""
-        thumb_elem = container.select_one("img.thumb, img.video-thumb")
+        thumb_elem = container.select_one("a.thumbnail img")
         if thumb_elem:
             thumbnail = thumb_elem.get("src", "").strip()
 
-        # Get duration
+        # Title (strip the leading site breadcrumb from the l1 anchor)
+        title = ""
+        title_elem = container.select_one("a.l1")
+        if title_elem:
+            title = " ".join(title_elem.get_text(" ", strip=True).split())
+
+        # Source / provider (e.g. "YouTube")
+        source = ""
+        source_elem = container.select_one(".site-name, .url")
+        if source_elem:
+            source = source_elem.get_text(strip=True)
+
+        # Duration
         duration = ""
-        duration_elem = container.select_one(".over-thumbnail-info.duration")
+        duration_elem = container.select_one(".duration")
         if duration_elem:
             duration = duration_elem.get_text(strip=True)
 
-        # Get title from the result header
-        title = ""
-        title_elem = container.select_one(".snippet-title")
-        if title_elem:
-            title = title_elem.get_text(strip=True)
-
-        # Get channel/uploader
-        uploader = ""
-        channel_elem = container.select_one(".attr.channel")
-        if channel_elem:
-            uploader = channel_elem.get_text(strip=True)
-
-        # Get provider (e.g., YouTube)
-        provider = ""
-        netloc_elem = container.select_one(".netloc.attr")
-        if netloc_elem:
-            provider = netloc_elem.get_text(strip=True)
-
-        # Get description
+        # Description
         description = ""
-        desc_elem = container.select_one(".snippet-description, p.desc")
+        desc_elem = container.select_one(".snippet-description")
         if desc_elem:
             description = desc_elem.get_text(strip=True)
 
-        # Get publish date
+        # Views / published from the age/badges
         published = ""
-        metrics_elem = container.select_one(".metrics")
-        if metrics_elem:
-            date_elem = metrics_elem.select_one(".attr:first-child")
-            if date_elem:
-                published = date_elem.get_text(strip=True)
-
-        # Get view count from metrics
         view_count = 0
-        if metrics_elem:
-            view_elems = metrics_elem.select(".attr")
-            for elem in view_elems:
-                text = elem.get_text(strip=True)
-                # Look for view count patterns (e.g., "1.31M", "34.1M", "17K")
-                if any(c.isdigit() for c in text) and not any(
-                    month in text.lower()
-                    for month in [
-                        "jan",
-                        "feb",
-                        "mar",
-                        "apr",
-                        "may",
-                        "jun",
-                        "jul",
-                        "aug",
-                        "sep",
-                        "oct",
-                        "nov",
-                        "dec",
-                        "hour",
-                        "day",
-                        "week",
-                        "month",
-                        "year",
-                        "ago",
-                    ]
-                ):
-                    view_count = self._parse_view_count(text)
-                    break
+        for badge in container.select(".badge, .age, .snippet-metadata, .result-metadata"):
+            text = badge.get_text(strip=True)
+            if not text:
+                continue
+            if any(
+                month in text.lower()
+                for month in (
+                    "jan", "feb", "mar", "apr", "may", "jun", "jul",
+                    "aug", "sep", "oct", "nov", "dec", "hour", "day",
+                    "week", "month", "year", "ago",
+                )
+            ):
+                published = text
+            elif any(c.isdigit() for c in text):
+                view_count = self._parse_view_count(text)
 
         return VideosResult(
             title=title,
             url=url,
             thumbnail=thumbnail,
             duration=duration,
-            uploader=uploader,
-            publisher=uploader,
-            provider=provider,
+            uploader=source,
+            publisher=source,
+            provider=source,
             description=description,
             published=published,
             statistics={"views": view_count} if view_count else {},
             content=description,
             images={"thumbnail": thumbnail} if thumbnail else {},
         )
+
 
     def _parse_view_count(self, text: str) -> int:
         """Parse view count from text like '1.31M' or '17K'.

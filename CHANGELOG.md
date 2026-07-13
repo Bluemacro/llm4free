@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026.07.13] - 2026-07-13
+
+### ✨ Added
+- **TTSOpenTTS** — New text-to-speech provider reverse-engineered from TTSOpen.ai (https://ttsopen.ai), a free OpenAI.fm alternative. Performs anonymous login, HMAC-SHA256-signed requests (`x-sign` over `x-ts + x-account + body`), task submission, polling, and MP3 download from `cdn.ttsopen.ai`. Supports 13 OpenAI-style voices (Alloy, Echo, Fable, Onyx, Nova, Shimmer, Ash, Ballad, Coral, Sage, Verse, Marin, Cedar) and speed control. Added `llm4free/TTS/ttsopen.py`, exported `TTSOpenTTS` from `llm4free/TTS/__init__.py`, and registered it in `tests/test_tts_live.py`.
+- **Lexica** — New text-to-image (TTI) provider for lexica.art, scraping the Next.js RSC image-generation endpoint. Added `llm4free/TTI/lexica.py` and exported `Lexica` from `llm4free/TTI/__init__.py`.
+- **`tests/test_tti_live.py`** — Live client test that runs every `llm4free.TTI` provider's `images.create()` against the real API and verifies the returned URL serves an image.
+
+### 🐛 Fixed
+- **Brave Videos** — Rewrote result parsing to match current Brave video snippet markup (`div.snippet[data-type="videos"]`, `a.thumbnail` links, `.duration`, `.site-name` source, badge-based views/dates).
+- **Yahoo Images** — Updated XPath selectors and post-extraction to the current Yahoo image results markup (`data-origurl`, `tile-title`, `tile-domain`); replaced JSON-title parsing with direct metadata cleanup.
+- **Yahoo News** — Updated XPath selectors and field extraction to current Yahoo news article markup.
+- **Yahoo Videos** — Updated selectors/extraction for current Yahoo video results.
+- **DuckDuckGo Weather** — Hardened formatting with safe `.get()` defaults, a date helper, and non-dict day skipping to avoid crashes on malformed/partial responses.
+
+### 🗑️ Removed
+- **`llm4free/Extra/cookie_harvester.py`** — Removed obsolete/unused code.
+- **`.txt`** — Removed the large consolidated free-AI-sites list (out of scope).
+
 ## [2026.07.09] - 2026-07-09
 
 ### ✨ Added

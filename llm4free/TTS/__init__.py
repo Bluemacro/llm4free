@@ -20,6 +20,7 @@ from llm4free.TTS.qwen import QwenTTS
 from llm4free.TTS.sherpa import SherpaTTS
 from llm4free.TTS.stream_elements import StreamElements
 from llm4free.TTS.ttsai import TTSAI
+from llm4free.TTS.ttsopen import TTSOpenTTS
 
 # Utility classes
 from llm4free.TTS.utils import SentenceTokenizer
@@ -45,5 +46,6 @@ __all__ = [
     "SherpaTTS",
     "StreamElements",
     "TTSAI",
+    "TTSOpenTTS",
     "XLNKTTS",
 ]

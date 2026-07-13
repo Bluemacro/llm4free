@@ -28,15 +28,15 @@ class YahooVideos(YahooSearchEngine[VideosResult]):
     search_method = "GET"
 
     # XPath selectors for video results
-    items_xpath = "//div[@id='results']//div[contains(@class, 'dd') or contains(@class, 'vr')]"
+    items_xpath = "//a[contains(@class, 'video-tile')]"
     elements_xpath: Mapping[str, str] = {
-        "title": ".//h3//a/text() | .//a/@title",
-        "url": ".//h3//a/@href | .//a/@href",
+        "title": ".//*[contains(@class, 'tile-title')]//text()",
+        "url": "./@data-referenceurl",
         "thumbnail": ".//img/@src",
-        "duration": ".//span[contains(@class, 'time') or contains(@class, 'duration')]//text()",
-        "views": ".//span[contains(@class, 'views')]//text()",
-        "published": ".//span[contains(@class, 'date') or contains(@class, 'age')]//text()",
-        "source": ".//span[contains(@class, 'source')]//text()",
+        "duration": ".//*[contains(@class, 'duration')]//text()",
+        "views": ".//*[contains(@class, 'subtitle')]//text()",
+        "published": ".//*[contains(@class, 'subtitle')]//text()",
+        "source": ".//*[contains(@class, 'subtitle')]//text()",
     }
 
     # Filter mappings
@@ -184,8 +184,8 @@ class YahooVideos(YahooSearchEngine[VideosResult]):
         cleaned_results = []
 
         for result in results:
-            # Extract real URL
-            if result.url:
+            # The `url` is already the real reference URL (data-referenceurl).
+            if result.url and "/RU=" in result.url:
                 result.url = self.extract_video_url(result.url)
 
             # Skip invalid results

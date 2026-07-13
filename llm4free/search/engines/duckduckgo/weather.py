@@ -43,54 +43,64 @@ class DuckDuckGoWeather(DuckDuckGoBase):
         if not result or "currentWeather" not in result or "forecastDaily" not in result:
             raise LLM4FreeE(f"Invalid weather data format for {location}")
 
+        current = result.get("currentWeather") or {}
+        metadata = current.get("metadata") or {}
+        days = (result.get("forecastDaily") or {}).get("days", [])
+
         formatted_data: WeatherData = {
-            "location": result["currentWeather"]["metadata"].get("ddg-location", "Unknown"),
+            "location": metadata.get("ddg-location", "Unknown"),
             "current": {
-                "condition": result["currentWeather"].get("conditionCode"),
-                "temperature_c": result["currentWeather"].get("temperature"),
-                "feels_like_c": result["currentWeather"].get("temperatureApparent"),
-                "humidity": result["currentWeather"].get("humidity"),
-                "wind_speed_ms": result["currentWeather"].get("windSpeed"),
-                "wind_direction": result["currentWeather"].get("windDirection"),
-                "visibility_m": result["currentWeather"].get("visibility"),
+                "condition": current.get("conditionCode"),
+                "temperature_c": current.get("temperature"),
+                "feels_like_c": current.get("temperatureApparent"),
+                "humidity": current.get("humidity"),
+                "wind_speed_ms": current.get("windSpeed"),
+                "wind_direction": current.get("windDirection"),
+                "visibility_m": current.get("visibility"),
             },
             "daily_forecast": [],
             "hourly_forecast": [],
         }
 
-        for day in result["forecastDaily"]["days"]:
+        def _fmt(iso: str | None) -> str:
+            if not iso:
+                return ""
+            try:
+                return datetime.fromisoformat(
+                    iso.replace("Z", "+00:00")
+                ).strftime("%Y-%m-%d" if "T" in iso else "%H:%M")
+            except (ValueError, TypeError):
+                return ""
+
+        for day in days:
+            if not isinstance(day, dict):
+                continue
             formatted_data["daily_forecast"].append(
                 {
-                    "date": datetime.fromisoformat(
-                        day["forecastStart"].replace("Z", "+00:00")
-                    ).strftime("%Y-%m-%d"),
-                    "condition": day["daytimeForecast"].get("conditionCode"),
-                    "max_temp_c": day["temperatureMax"],
-                    "min_temp_c": day["temperatureMin"],
-                    "sunrise": datetime.fromisoformat(
-                        day["sunrise"].replace("Z", "+00:00")
-                    ).strftime("%H:%M"),
-                    "sunset": datetime.fromisoformat(day["sunset"].replace("Z", "+00:00")).strftime(
-                        "%H:%M"
-                    ),
+                    "date": _fmt(day.get("forecastStart")),
+                    "condition": (day.get("daytimeForecast") or {}).get("conditionCode"),
+                    "max_temp_c": day.get("temperatureMax"),
+                    "min_temp_c": day.get("temperatureMin"),
+                    "sunrise": _fmt(day.get("sunrise")),
+                    "sunset": _fmt(day.get("sunset")),
                 }
             )
 
-        if "forecastHourly" in result and "hours" in result["forecastHourly"]:
-            for hour in result["forecastHourly"]["hours"]:
-                formatted_data["hourly_forecast"].append(
-                    {
-                        "time": datetime.fromisoformat(
-                            hour["forecastStart"].replace("Z", "+00:00")
-                        ).strftime("%H:%M"),
-                        "condition": hour.get("conditionCode"),
-                        "temperature_c": hour.get("temperature"),
-                        "feels_like_c": hour.get("temperatureApparent"),
-                        "humidity": hour.get("humidity"),
-                        "wind_speed_ms": hour.get("windSpeed"),
-                        "wind_direction": hour.get("windDirection"),
-                        "visibility_m": hour.get("visibility"),
-                    }
-                )
+        hourly = (result.get("forecastHourly") or {}).get("hours", [])
+        for hour in hourly:
+            if not isinstance(hour, dict):
+                continue
+            formatted_data["hourly_forecast"].append(
+                {
+                    "time": _fmt(hour.get("forecastStart")),
+                    "condition": hour.get("conditionCode"),
+                    "temperature_c": hour.get("temperature"),
+                    "feels_like_c": hour.get("temperatureApparent"),
+                    "humidity": hour.get("humidity"),
+                    "wind_speed_ms": hour.get("windSpeed"),
+                    "wind_direction": hour.get("windDirection"),
+                    "visibility_m": hour.get("visibility"),
+                }
+            )
 
         return formatted_data

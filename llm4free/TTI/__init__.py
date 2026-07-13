@@ -16,6 +16,7 @@ from llm4free.TTI.nologintool import NoLoginTool
 from llm4free.TTI.onefreeai import OneFreeAI
 from llm4free.TTI.perchance import PerchanceAI
 from llm4free.TTI.pollinations import PollinationsAI
+from llm4free.TTI.lexica import Lexica
 from llm4free.TTI.raphael import RaphaelAI
 from llm4free.TTI.stablehorde import StableHordeAI
 from llm4free.TTI.together import TogetherImage
@@ -46,6 +47,7 @@ __all__ = [
     "StableHordeAI",
     "TogetherImage",
     "MiragicAI",
+    "Lexica",
     "PerchanceAI",
     "VisualGPT",
 ]
