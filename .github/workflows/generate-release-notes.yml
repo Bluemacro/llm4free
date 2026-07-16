@@ -91,8 +91,8 @@ jobs:
         id: notes
         env:
           # Optional: set LLM_API_KEY (or OPENAI_API_KEY) in repo secrets to use
-          # a keyed model. When unset, model="auto" falls back to the free
-          # no-auth providers bundled with llm4free (e.g. Miklium, Surfsense).
+          # a keyed model. When unset, we use the reliable no-auth providers
+          # (AI4Chat / Toolbaz) instead of the flaky Miklium/Surfsense ones.
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.LLM_API_KEY }}
           VERSION: ${{ steps.version.outputs.version }}
@@ -132,16 +132,48 @@ jobs:
           {full}
           """).strip()
 
+          notes = ""
           try:
               from llm4free import Client
               client = Client(api_key=os.environ.get("LLM_API_KEY") or None)
-              resp = client.chat.completions.create(
-                  model="auto",
-                  messages=[{"role": "user", "content": prompt}],
-                  max_tokens=1200,
-                  stream=False,
-              )
-              notes = resp.choices[0].message.content or ""
+
+              # Prefer reliable no-auth providers (AI4Chat, Toolbaz) over the
+              # flaky Miklium/Surfsense endpoints. Each entry: (provider, model).
+              from llm4free.llm.ai4chat import AI4Chat
+              from llm4free.llm.toolbaz import Toolbaz
+
+              attempts = [
+                  (AI4Chat, "gpt-4o"),
+                  (AI4Chat, "gemini-2.5-flash-preview"),
+                  (Toolbaz, "gpt-4o"),
+                  (Toolbaz, "gemini-2.5-flash"),
+              ]
+              if os.environ.get("LLM_API_KEY"):
+                  # Keyed model when a secret is provided.
+                  attempts = [(None, "auto")] + attempts
+
+              last_err = None
+              for provider, model in attempts:
+                  try:
+                      resp = client.chat.completions.create(
+                          model=model,
+                          provider=provider,
+                          messages=[{"role": "user", "content": prompt}],
+                          max_tokens=1200,
+                          stream=False,
+                      )
+                      content = getattr(getattr(resp, "choices", [None])[0], "message", None)
+                      notes = getattr(content, "content", "") or ""
+                      if notes.strip():
+                          print(f"✅ Generated via {provider.__name__ if provider else 'auto'}/{model}")
+                          break
+                  except Exception as exc:  # try next provider
+                      last_err = exc
+                      print(f"⚠️ {provider.__name__ if provider else 'auto'}/{model} failed: {exc}", file=sys.stderr)
+                      continue
+
+              if not notes.strip():
+                  raise RuntimeError(last_err or "All providers returned empty content")
           except Exception as exc:  # never fail the workflow on LLM errors
               print(f"LLM generation failed: {exc}", file=sys.stderr)
               notes = (
