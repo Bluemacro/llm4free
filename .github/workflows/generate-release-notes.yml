@@ -95,6 +95,8 @@ jobs:
           # no-auth providers bundled with llm4free (e.g. Miklium, Surfsense).
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.LLM_API_KEY }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PREVIOUS: ${{ steps.version.outputs.previous_tag }}
         run: |
           python - <<'PY'
           import os, pathlib, textwrap, sys
@@ -152,9 +154,6 @@ jobs:
           print("---- RELEASE NOTES ----")
           print(notes)
           PY
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-          PREVIOUS: ${{ steps.version.outputs.previous_tag }}
 
       - name: Upload release notes artifact
         # Standalone preview artifact. The release-with-changelog.yml workflow

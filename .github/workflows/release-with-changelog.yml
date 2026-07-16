@@ -137,6 +137,8 @@ jobs:
           # providers bundled with llm4free (e.g. Miklium, Surfsense).
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.LLM_API_KEY }}
+          VERSION: ${{ steps.get_version.outputs.version }}
+          PREVIOUS: ${{ steps.previous_tag.outputs.previous_tag }}
         run: |
           python - <<'PY'
           import os, pathlib, textwrap, sys
@@ -194,9 +196,6 @@ jobs:
           else:
               print("No LLM notes produced; will fall back to CHANGELOG.md / git log.")
           PY
-        env:
-          VERSION: ${{ steps.get_version.outputs.version }}
-          PREVIOUS: ${{ steps.previous_tag.outputs.previous_tag }}
 
       - name: Extract changelog from changelog.md
         id: changelog
