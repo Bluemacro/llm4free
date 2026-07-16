@@ -44,6 +44,10 @@ keywords = [
     "text-to-image", "tti", "weather", "youtube", "toolkit", "utilities",
     "web-search", "duckduckgo", "google", "yep"
 ]
+# NOTE: The CDP-backed providers (DeepInfraFree, Perchance, Cloudflare) and the
+# llm4free.requests.cdp module drive a real browser via the `agent-browser` CLI
+# (https://github.com/xtekky/agent-browser). It is NOT a PyPI dependency; install
+# it once with:  npm i -g agent-browser && agent-browser install
 dependencies = [
     "typing_extensions>=4.0.0",
     "curl_cffi",
