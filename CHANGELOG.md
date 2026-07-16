@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026.07.16] - 2026-07-16
+
+### ✨ Added
+- **CDP browser client** — New `llm4free.requests.cdp` package providing `CDPSession` (async) and `SyncCDPSession` (sync) that wrap the [`agent-browser`](https://github.com/xtekky/agent-browser) CLI to drive Chrome for Cloudflare Turnstile solving and cookie/user-agent harvesting. Replaces the raw `websocket-client` CDP approach. Added `llm4free/browser_config.py` for browser/port configuration and a `get_args_from_cdp()` helper returning browser-derived request kwargs for `curl_cffi`.
+- **Miklium** — New free chat provider (https://miklium.vercel.app) using `curl_cffi` with `impersonate="chrome"`. Added `llm4free/llm/miklium.py`, exported from `llm4free.llm`.
+- **Surfsense** — New free streaming chat provider (https://api.surfsense.com) using `curl_cffi` SSE with `impersonate="safari15_3"`. Added `llm4free/llm/surfsense.py`, exported from `llm4free.llm`.
+- **Tests** — Added `tests/providers/test_cdp.py` (mocked CDP/agent-browser wrapper) and `tests/providers/test_miklium_surfsense.py` (mocked `curl_cffi` request/response parsing).
+
+### 🚚 Moved
+- **DeepInfraFree, Perchance, Cloudflare** — Browser-backed providers ported from gpt4free PR #3483 (Turnstile-solving for DeepInfra/Perchance and the Cloudflare AI Playground) moved to `llm4free/llm/UNFINISHED/`. They are excluded from the active provider scan so the unified `Client` never auto-launches a browser. Cloudflare's Turnstile does not resolve in headless/sandboxed environments (confirmed against g4f's own upstream CDP client, which fails identically); they remain importable directly from `llm4free.llm.UNFINISHED` for environments where the challenge passes.
+
 ## [2026.07.13] - 2026-07-13
 
 ### ✨ Added
