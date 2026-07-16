@@ -1,0 +1,167 @@
+name: Generate Release Notes (LLM)
+
+# Generates human-readable release notes from the git diff between the
+# previous version tag and the new version (bumped in llm4free/version.py).
+# Uses llm4free's own unified Client with `model="auto"` to summarize the diff.
+
+on:
+  # Triggered when the version is bumped (the publish workflow updates version.py).
+  push:
+    branches: [main]
+    paths:
+      - "llm4free/version.py"
+  # Also triggered after the PyPI publish finishes, so this always runs for the
+  # release currently being cut (covers manual version bumps too).
+  workflow_run:
+    workflows: ["Publish to PyPI"]
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to generate notes for (defaults to llm4free/version.py)"
+        required: false
+        type: string
+      previous_tag:
+        description: "Previous tag to diff from (auto-detected if empty)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  generate-notes:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Resolve version and previous tag
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION=$(grep -oP '__version__ = "\K[^"]*' llm4free/version.py)
+          fi
+          VERSION="${VERSION#v}"; VERSION="${VERSION#V}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+          if [ -n "${{ inputs.previous_tag }}" ]; then
+            PREV="${{ inputs.previous_tag }}"
+          else
+            PREV=$(git tag --sort=-creatordate | grep -vE '\.beta|-beta' | grep -v "^v?${VERSION}$" | head -n1)
+            if [ -z "$PREV" ]; then
+              PREV=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+            fi
+          fi
+          echo "previous_tag=$PREV" >> "$GITHUB_OUTPUT"
+          echo "New version: $VERSION | Previous tag: ${PREV:-<none>}"
+
+      - name: Collect git diff (stat + patch)
+        id: diff
+        run: |
+          PREV="${{ steps.version.outputs.previous_tag }}"
+          if [ -z "$PREV" ]; then
+            # No previous tag: diff against the initial commit's parent.
+            git diff --stat $(git rev-list --max-parents=0 HEAD) HEAD > diff_stat.txt
+            git diff $(git rev-list --max-parents=0 HEAD) HEAD > diff_full.txt
+          else
+            git diff --stat "$PREV" HEAD > diff_stat.txt
+            git diff "$PREV" HEAD > diff_full.txt
+          fi
+          # Cap the full diff size so it fits the model context window.
+          truncate -s 24000 diff_full.txt 2>/dev/null || true
+          echo "stat_lines=$(wc -l < diff_stat.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Install llm4free
+        run: |
+          python -m pip install --upgrade pip uv
+          uv pip install --system -e ".[dev]" 2>/dev/null || pip install -e ".[dev]"
+
+      - name: Generate release notes with llm4free Client
+        id: notes
+        env:
+          # Optional: set LLM_API_KEY (or OPENAI_API_KEY) in repo secrets to use
+          # a keyed model. When unset, model="auto" falls back to the free
+          # no-auth providers bundled with llm4free (e.g. Miklium, Surfsense).
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.LLM_API_KEY }}
+        run: |
+          python - <<'PY'
+          import os, pathlib, textwrap, sys
+
+          version = os.environ["VERSION"]
+          previous = os.environ.get("PREVIOUS", "")
+          stat = pathlib.Path("diff_stat.txt").read_text(encoding="utf-8", errors="replace")
+          full = pathlib.Path("diff_full.txt").read_text(encoding="utf-8", errors="replace")
+
+          prompt = textwrap.dedent(f"""
+          You are writing GitHub release notes for the Python package `llm4free`.
+          The new version is {version} (previous was {previous or 'initial release'}).
+
+          Below is the git diff (summary first, then the truncated full patch)
+          between the previous version and this release.
+
+          Write polished, user-facing release notes in Markdown that:
+          - Lead with a short one-line summary of the release.
+          - Group changes under `### ✨ Added`, `### 🐛 Fixed`, `### 🚚 Moved`,
+            `### 🗑️ Removed`, `### 🔧 Changed` using the repo's CHANGELOG style
+            (emoji headings, concise bullet points).
+          - Mention file/module names where useful (e.g. `llm4free/llm/miklium.py`).
+          - Are concise and scannable; do NOT invent features not in the diff.
+          - End with an `### 📦 Installation` section:
+            ```bash
+            pip install --upgrade llm4free=={version}
+            ```
+
+          --- GIT DIFF SUMMARY ---
+          {stat}
+
+          --- GIT DIFF (truncated) ---
+          {full}
+          """).strip()
+
+          try:
+              from llm4free import Client
+              client = Client(api_key=os.environ.get("LLM_API_KEY") or None)
+              resp = client.chat.completions.create(
+                  model="auto",
+                  messages=[{"role": "user", "content": prompt}],
+                  max_tokens=1200,
+                  stream=False,
+              )
+              notes = resp.choices[0].message.content or ""
+          except Exception as exc:  # never fail the workflow on LLM errors
+              print(f"LLM generation failed: {exc}", file=sys.stderr)
+              notes = (
+                  f"## [{version}] - release notes\n\n"
+                  f"Automated generation failed ({exc}). Raw diff summary:\n\n"
+                  f"```\n{stat[:4000]}\n```\n"
+              )
+
+          pathlib.Path("RELEASE_NOTES_LLM.md").write_text(notes, encoding="utf-8")
+          print("---- RELEASE NOTES ----")
+          print(notes)
+          PY
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          PREVIOUS: ${{ steps.version.outputs.previous_tag }}
+
+      - name: Upload release notes artifact
+        # Standalone preview artifact. The release-with-changelog.yml workflow
+        # generates its own LLM notes inline, so this is for manual inspection.
+        uses: actions/upload-artifact@v7
+        with:
+          name: llm-release-notes-preview-${{ steps.version.outputs.version }}
+          path: RELEASE_NOTES_LLM.md
+          retention-days: 90
+          if-no-files-found: warn
