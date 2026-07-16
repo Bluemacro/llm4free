@@ -16,7 +16,6 @@ from llm4free.litagent import LitAgent
 from llm4free.TTI.base import BaseImages, TTICompatibleProvider
 from llm4free.TTI.utils import ImageData, ImageResponse
 
-
 BASE_URL = "https://stablehorde.net/api/v2"
 ANON_KEY = "0000000000"
 
@@ -29,7 +28,7 @@ DEFAULT_HEADERS = {
 def _build_client_agent() -> str:
     agent = LitAgent()
     # Format: client_name:version:contact_details
-    return f"llm4free:1.0:unknown"
+    return "llm4free:1.0:unknown"
 
 
 class Images(BaseImages):

@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 ## [2026.07.16] - 2026-07-16
 
 ### ✨ Added
-- **CDP browser client** — New `llm4free.requests.cdp` package providing `CDPSession` (async) and `SyncCDPSession` (sync) that wrap the [`agent-browser`](https://github.com/xtekky/agent-browser) CLI to drive Chrome for Cloudflare Turnstile solving and cookie/user-agent harvesting. Replaces the raw `websocket-client` CDP approach. Added `llm4free/browser_config.py` for browser/port configuration and a `get_args_from_cdp()` helper returning browser-derived request kwargs for `curl_cffi`.
+- **CDP browser client** — New `llm4free.requests.cdp` package providing `CDPSession` (async) and `SyncCDPSession` (sync) that wrap the [`agent-browser`](https://github.com/vercel-labs/agent-browser) CLI to drive Chrome for Cloudflare Turnstile solving and cookie/user-agent harvesting. Replaces the raw `websocket-client` CDP approach. Added `llm4free/browser_config.py` for browser/port configuration and a `get_args_from_cdp()` helper returning browser-derived request kwargs for `curl_cffi`.
 - **Miklium** — New free chat provider (https://miklium.vercel.app) using `curl_cffi` with `impersonate="chrome"`. Added `llm4free/llm/miklium.py`, exported from `llm4free.llm`.
 - **Surfsense** — New free streaming chat provider (https://api.surfsense.com) using `curl_cffi` SSE with `impersonate="safari15_3"`. Added `llm4free/llm/surfsense.py`, exported from `llm4free.llm`.
 - **Tests** — Added `tests/providers/test_cdp.py` (mocked CDP/agent-browser wrapper) and `tests/providers/test_miklium_surfsense.py` (mocked `curl_cffi` request/response parsing).
