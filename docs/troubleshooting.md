@@ -1,16 +1,16 @@
 # Troubleshooting Guide
 
-> **Last updated:** 2026-01-24  
-> **Type:** Support & FAQ  
-> **Audience:** All users
+> Last updated: 2026-07-16
+> Type: Support & FAQ
+> Audience: All users
 
-## Quick Navigation
+## Table of Contents
 
 - [Installation Issues](#installation-issues)
 - [Authentication Errors](#authentication-errors)
 - [Runtime Errors](#runtime-errors)
-- [Performance Issues](#performance-issues)
 - [Streaming Problems](#streaming-problems)
+- [Performance Issues](#performance-issues)
 - [FAQ](#faq)
 
 ---
@@ -63,6 +63,7 @@ python -m pip install llm4free
 ### "Permission denied" during installation
 
 **Windows:**
+
 ```bash
 # Run Command Prompt as Administrator
 # Then run
@@ -70,6 +71,7 @@ pip install -U llm4free
 ```
 
 **Linux/macOS:**
+
 ```bash
 # Use --user flag to install for current user only
 pip install --user llm4free
@@ -107,57 +109,55 @@ pip install llm4free
 
 ### "401 Unauthorized" or "Invalid API Key"
 
-**Diagnosis:** API key is invalid, expired, or has wrong permissions.
+**Diagnosis:** API key is invalid, expired, or has wrong permissions. This applies to auth-required providers such as `Groq`, `DeepInfra`, `OpenRouter`, and others in `llm4free.llm.Auth`.
 
 **Solutions:**
 
 ```python
 # 1. Check for typos and whitespace
-api_key = "sk-your-key"  # Good
-api_key = "sk-your-key " # Bad - trailing space!
-api_key = " sk-your-key" # Bad - leading space!
+api_key = "gsk-your-key"  # Good
+api_key = "gsk-your-key " # Bad - trailing space!
+api_key = " gsk-your-key" # Bad - leading space!
 
-# 2. Verify key is from correct service
-# For OpenAI, keys start with "sk-"
-# For GROQ, keys start with "gsk_"
-# For other services, check their documentation
+# 2. Verify the key format for the provider
+# Groq keys start with "gsk_"
+# DeepInfra keys are issued from deepinfra.com
 
-client = OpenAI(api_key=api_key.strip())  # Remove whitespace
+from llm4free.llm.Auth.groq import Groq
+client = Groq(api_key=api_key.strip())  # Remove whitespace
 ```
 
-**For each service:**
-
-| Service | Key Format | Where to Get |
-|---------|-----------|-------------|
-| OpenAI | `sk-...` | https://platform.openai.com/api-keys |
-| GROQ | `gsk_...` | https://console.groq.com/keys |
-| Cohere | `co_...` | https://dashboard.cohere.com/api-keys |
-| Google | See docs | https://cloud.google.com/docs/authentication |
+> [!NOTE]
+> Free providers (`HeckAI`, `ArtingAI`) require no API key. If you only need basic chat, prefer them to avoid auth issues entirely.
 
 ### "API key not provided"
 
-**Diagnosis:** Required API key is missing.
+**Diagnosis:** A required API key is missing for an auth-gated provider.
 
 **Solutions:**
 
 ```python
 # 1. Pass key directly (for testing only)
-client = OpenAI(api_key="your-actual-key-here")
+from llm4free.llm.Auth.groq import Groq
+client = Groq(api_key="your-actual-key-here")
 
 # 2. Use environment variable (more secure)
 import os
-os.environ["OPENAI_API_KEY"] = "your-key-here"
-client = OpenAI()  # Will read from environment
+os.environ["GROQ_API_KEY"] = "your-key-here"
+client = Groq(api_key=os.environ["GROQ_API_KEY"])
 
 # 3. Set in your shell
-# Linux/macOS: export OPENAI_API_KEY=your-key-here
-# Windows PowerShell: $env:OPENAI_API_KEY="your-key-here"
-# Windows CMD: set OPENAI_API_KEY=your-key-here
+# Linux/macOS: export GROQ_API_KEY=your-key-here
+# Windows PowerShell: $env:GROQ_API_KEY="your-key-here"
 
 # 4. For providers that don't require auth
-from llm4free import Meta
-meta = Meta()  # No key needed
-response = meta.chat("Hello")
+from llm4free.llm.heckai import HeckAI
+ai = HeckAI()  # No key needed
+response = ai.chat.completions.create(
+    model="auto",
+    messages=[{"role": "user", "content": "Hello"}],
+)
+print(response.choices[0].message.content)
 ```
 
 ### "Invalid authentication credentials"
@@ -171,19 +171,15 @@ response = meta.chat("Hello")
 # 2. Make sure you're using the latest key
 # 3. Check if the key has the required permissions
 
-# 4. Test connectivity with curl
+# 4. Test connectivity with curl (example for a keyed provider)
 import subprocess
-import json
 
 api_key = "your-key"
-headers = {"Authorization": f"Bearer {api_key}"}
-
-# Test OpenAI connectivity
-result = subprocess.run([
-    "curl", "-H", f"Authorization: Bearer {api_key}",
-    "https://api.openai.com/v1/models"
-], capture_output=True, text=True)
-
+result = subprocess.run(
+    ["curl", "-H", f"Authorization: Bearer {api_key}",
+     "https://api.groq.com/openai/v1/models"],
+    capture_output=True, text=True,
+)
 print(result.stdout)  # Should show available models
 ```
 
@@ -207,22 +203,19 @@ except OSError:
     print("No internet connection")
 
 # 2. Increase timeout
-from llm4free import GROQ
-client = GROQ(api_key="key", timeout=60)  # 60 seconds instead of default 30
+from llm4free.llm.Auth.groq import Groq
+client = Groq(api_key="key", timeout=60)  # 60 seconds instead of default
 
-# 3. Check if server is up
-import subprocess
-result = subprocess.run(["ping", "-c", "1", "api.groq.com"], 
-                       capture_output=True, text=True)
-print(result.stdout)
-
-# 4. Use a retry mechanism
+# 3. Use a retry mechanism
 from llm4free.AIutel import retry
 
 @retry(max_attempts=3, delay=2)
 def safe_chat(prompt):
-    client = GROQ(api_key="key")
-    return client.chat(prompt)
+    client = Groq(api_key="key")
+    return client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": prompt}],
+    )
 
 response = safe_chat("Hello")
 ```
@@ -235,34 +228,26 @@ response = safe_chat("Hello")
 
 ```python
 # 1. Increase timeout value
-from llm4free import OpenAI
+from llm4free.llm.Auth.groq import Groq
 
-client = OpenAI(
+client = Groq(
     api_key="key",
-    timeout=120  # 2 minutes
+    timeout=120,  # 2 minutes
 )
 
 # 2. Try with a simpler prompt
-response = client.chat("Hello")  # Simple first
+response = client.chat.completions.create(
+    model="llama-3.3-70b-versatile",
+    messages=[{"role": "user", "content": "Hello"}],
+)
 
-# 3. Check network speed
-import subprocess
-import time
-
-start = time.time()
-try:
-    client.chat("Test")
-except TimeoutError:
-    duration = time.time() - start
-    print(f"Timed out after {duration:.1f}s - your network may be slow")
-
-# 4. Use a proxy/VPN if certain services are blocked
-client = OpenAI(
+# 3. Use a proxy/VPN if certain services are blocked
+client = Groq(
     api_key="key",
     proxies={
         "http": "http://proxy.example.com:8080",
         "https": "http://proxy.example.com:8080",
-    }
+    },
 )
 ```
 
@@ -275,92 +260,85 @@ client = OpenAI(
 ```python
 # 1. Add delays between requests
 import time
-from llm4free import GROQ
+from llm4free.llm.Auth.groq import Groq
 
-client = GROQ(api_key="key")
+client = Groq(api_key="key")
 
 for i in range(10):
-    response = client.chat(f"Question {i}")
-    print(response)
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": f"Question {i}"}],
+    )
+    print(response.choices[0].message.content)
     time.sleep(5)  # Wait 5 seconds between requests
 
-# 2. Use request queuing
-from queue import Queue
-from threading import Thread
-import time
-
-def rate_limited_chat(prompts):
-    queue = Queue(maxsize=1)  # Max 1 concurrent request
-    
-    def worker():
-        client = GROQ(api_key="key")
-        while True:
-            prompt = queue.get()
-            if prompt is None:
-                break
-            response = client.chat(prompt)
-            print(response)
-            time.sleep(2)
-            queue.task_done()
-    
-    # Start worker thread
-    thread = Thread(target=worker, daemon=False)
-    thread.start()
-    
-    # Add prompts to queue
-    for prompt in prompts:
-        queue.put(prompt)
-    
-    queue.put(None)  # Signal worker to stop
-    thread.join()
-
-rate_limited_chat(["Question 1", "Question 2"])
-
-# 3. Check rate limits
+# 2. Check rate limits in the provider's documentation
 print("Check service documentation for rate limits:")
-print("- OpenAI: https://platform.openai.com/account/rate-limits")
-print("- GROQ: https://console.groq.com/docs/rate-limits")
+print("- Groq: https://console.groq.com/docs/rate-limits")
 ```
 
 ### "AttributeError" or "TypeError"
 
-**Diagnosis:** Using wrong method names or parameters.
+**Diagnosis:** Using wrong method names, attributes, or import paths.
 
 **Solutions:**
 
 ```python
 # 1. Check method names (Python is case-sensitive)
-from llm4free import Meta
+from llm4free.llm.heckai import HeckAI
 
-ai = Meta()
+client = HeckAI()
 
-# Good - correct method name
-response = ai.chat("Hello")
+# Good - correct OpenAI-compatible interface
+response = client.chat.completions.create(
+    model="auto",
+    messages=[{"role": "user", "content": "Hello"}],
+)
 
-# Bad - wrong method name
-# response = ai.Chat("Hello")  # AttributeError!
+# Bad - wrong interface (AttributeError!)
+# response = client.Chat("Hello")
 
 # 2. Check method signatures
 from inspect import signature
-
-sig = signature(ai.chat)
+sig = signature(client.chat.completions.create)
 print(sig)  # Shows what parameters are expected
 
 # 3. Use dir() to list available methods
-print(dir(ai))  # Shows all available methods
+print(dir(client))
 
 # 4. Check docstrings
-help(ai.chat)  # Shows full documentation
-
-# 5. Use IDE autocomplete/IntelliSense
-# In VSCode/PyCharm, type and press Ctrl+Space for suggestions
+help(client.chat.completions.create)
 ```
 
-### "ImportError" for specific modules
+### "ImportError" or "ModuleNotFoundError" for specific modules
 
-**Diagnosis:** Optional dependencies not installed.
+**Diagnosis:** Wrong import path, or optional dependencies not installed.
 
 **Solutions:**
+
+> [!WARNING]
+> The legacy import paths `llm4free.Provider.Openai_comp.*` and top-level names like `Meta`, `GROQ`, `OpenAI` do **not** exist in this version. Use the verified paths below:
+>
+> - `from llm4free.llm.heckai import HeckAI`
+> - `from llm4free.llm.Auth.groq import Groq`
+> - `from llm4free.client import Client`
+> - `from llm4free import DuckDuckGoSearch`
+
+> [!TIP]
+> When using the unified `Client`, two options make debugging provider failures much easier:
+> - **Exclude flaky providers** so the auto-failover logic skips them entirely:
+>   ```python
+>   from llm4free.client import Client
+>   client = Client(exclude=["SomeFlakyProvider"])
+>   ```
+> - **Trace which provider actually answered** a request. Pass `print_provider_info=True` to the constructor for a one-time banner, or inspect `client.chat.completions.last_provider` after a call:
+>   ```python
+>   from llm4free.client import Client
+>   client = Client(print_provider_info=True)
+>   resp = client.chat.completions.create(model="auto", messages=[{"role": "user", "content": "Hi"}])
+>   print("Served by:", client.chat.completions.last_provider)
+>   ```
+> The same exclusion helpers exist for the image and audio namespaces: `exclude_images=[...]` and `exclude_tts=[...]`.
 
 ```bash
 # 1. Install with extras for API server
@@ -389,33 +367,27 @@ pip list | grep llm4free
 **Solutions:**
 
 ```python
-from llm4free import GROQ
+import types
+from llm4free.llm.Auth.groq import Groq
 
-client = GROQ(api_key="key")
+client = Groq(api_key="key")
 
 # 1. Make sure stream=True
-response = client.chat("Write a story", stream=True)
+response = client.chat.completions.create(
+    model="llama-3.3-70b-versatile",
+    messages=[{"role": "user", "content": "Write a story"}],
+    stream=True,
+)
 
 # 2. Check if it's actually a generator
-import types
 if isinstance(response, types.GeneratorType):
-    print("✓ Streaming enabled")
+    print("Streaming enabled")
     for chunk in response:
-        print(chunk, end="", flush=True)
+        if chunk.choices[0].delta.content:
+            print(chunk.choices[0].delta.content, end="", flush=True)
 else:
-    print("✗ Not streaming - got direct response")
+    print("Not streaming - got direct response")
     print(response)
-
-# 3. Handle both streaming and non-streaming
-def safe_print_response(response):
-    if isinstance(response, types.GeneratorType):
-        for chunk in response:
-            print(chunk, end="", flush=True)
-    else:
-        print(response)
-
-response = client.chat("Hello", stream=True)
-safe_print_response(response)
 ```
 
 ### "Incomplete response while streaming"
@@ -425,20 +397,24 @@ safe_print_response(response)
 **Solutions:**
 
 ```python
-from llm4free import GROQ
+from llm4free.llm.Auth.groq import Groq
 
-client = GROQ(api_key="key", timeout=120)
+client = Groq(api_key="key", timeout=120)
 
 full_response = ""
 try:
-    for chunk in client.chat("Your prompt", stream=True):
-        full_response += chunk
-        print(chunk, end="", flush=True)
+    stream = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": "Your prompt"}],
+        stream=True,
+    )
+    for chunk in stream:
+        if chunk.choices[0].delta.content:
+            full_response += chunk.choices[0].delta.content
+            print(chunk.choices[0].delta.content, end="", flush=True)
 except Exception as e:
     print(f"\n\nStream interrupted: {e}")
     print(f"Partial response received:\n{full_response}")
-
-# Use with larger timeout for long responses
 ```
 
 ---
@@ -455,34 +431,35 @@ except Exception as e:
 # 1. Check network speed
 import time
 
+from llm4free.llm.heckai import HeckAI
+client = HeckAI()
+
 start = time.time()
-response = client.chat("What is AI?")
+response = client.chat.completions.create(
+    model="google/gemini-2.5-flash-preview",
+    messages=[{"role": "user", "content": "What is AI?"}],
+)
 duration = time.time() - start
 
 if duration > 10:
-    print(f"⚠️  Slow response: {duration:.1f}s")
+    print(f"Slow response: {duration:.1f}s")
 else:
-    print(f"✓ Normal response time: {duration:.1f}s")
+    print(f"Normal response time: {duration:.1f}s")
 
-# 2. Use faster models
-from llm4free import GROQ
-
-# Slower but more capable
-client = GROQ(api_key="key")
-response = client.chat("Prompt", model="llama-3.1-70b-versatile")
-
-# Faster but less capable
-response = client.chat("Prompt", model="llama-3.1-8b-instant")
-
-# 3. Reduce response length
-response = client.chat(
-    "What is AI?",
-    max_tokens=100  # Shorter response = faster
+# 2. Use faster models (Groq is known for low latency)
+from llm4free.llm.Auth.groq import Groq
+client = Groq(api_key="key")
+response = client.chat.completions.create(
+    model="llama-3.1-8b-instant",
+    messages=[{"role": "user", "content": "Prompt"}],
 )
 
-# 4. Use dedicated APIs vs free services
-# Official APIs (OpenAI, GROQ with key) are usually faster
-# Than free alternatives
+# 3. Reduce response length
+response = client.chat.completions.create(
+    model="llama-3.1-8b-instant",
+    messages=[{"role": "user", "content": "What is AI?"}],
+    max_tokens=100,  # Shorter response = faster
+)
 ```
 
 ### "High memory usage" or "Out of memory"
@@ -492,47 +469,31 @@ response = client.chat(
 **Solutions:**
 
 ```python
-# 1. Clear conversation history periodically
-from llm4free import Meta
+# 1. Process streaming chunks and discard (don't accumulate)
+from llm4free.llm.heckai import HeckAI
+client = HeckAI()
 
-ai = Meta(is_conversation=True)
+for chunk in client.chat.completions.create(
+    model="auto",
+    messages=[{"role": "user", "content": "Long prompt"}],
+    stream=True,
+):
+    if chunk.choices[0].delta.content:
+        # Process each chunk and discard
+        process_chunk(chunk.choices[0].delta.content)
 
-# Chat several times
-for i in range(10):
-    response = ai.chat(f"Question {i}")
-    
-    if i % 5 == 0:
-        # Clear history to free memory
-        ai.conversation = None
-        ai.messages = []
-
-# 2. Limit max tokens
-response = client.chat(
-    "Your prompt",
-    max_tokens=500  # Limit response size
-)
-
-# 3. Don't store large responses in memory
-# Instead, process and discard
-for chunk in client.chat("Long prompt", stream=True):
-    # Process each chunk and discard
-    process_chunk(chunk)
-    # Don't accumulate in memory
-
-# 4. Process large lists in batches
-prompts = ["Q1", "Q2", ...]  # Potentially huge list
+# 2. Process large lists in batches
+prompts = ["Q1", "Q2"]  # Potentially huge list
 
 batch_size = 10
 for i in range(0, len(prompts), batch_size):
-    batch = prompts[i:i+batch_size]
-    
+    batch = prompts[i:i + batch_size]
     for prompt in batch:
-        response = client.chat(prompt)
-        # Process response
-    
-    # Clear batch from memory
+        response = client.chat.completions.create(
+            model="auto",
+            messages=[{"role": "user", "content": prompt}],
+        )
     del batch
-    
     import gc
     gc.collect()  # Force garbage collection
 ```
@@ -545,15 +506,14 @@ for i in range(0, len(prompts), batch_size):
 
 **A:** Depends on your needs:
 
-- **Free, no API key:** `Meta`, `GEMINI` (limited)
-- **Fast and affordable:** `GROQ` (free tier available)
-- **Most capable:** `OpenAI` (GPT-4)
-- **Good balance:** `GROQ`, `DeepInfra`
-- **Experimental:** `Cohere`, `TogetherAI`
+- **Free, no API key:** `HeckAI`, `ArtingAI` (in `llm4free.llm`)
+- **Fast and affordable:** `Groq` (free tier available, in `llm4free.llm.Auth`)
+- **Open models:** `DeepInfra`, `TogetherAI` (auth required)
+- **Multi-model router:** `OpenRouter` (auth required)
 
 ### Q: How do I use multiple providers as fallback?
 
-**A:** Use the `Client` with automatic fallback:
+**A:** Use the `Client` with automatic failover:
 
 ```python
 from llm4free.client import Client
@@ -573,18 +533,19 @@ Or implement manual fallback:
 ```python
 def chat_with_fallback(prompt):
     providers = [
-        ("GROQ", lambda: GROQ(api_key="key").chat(prompt)),
-        ("OpenAI", lambda: OpenAI(api_key="key").chat(prompt)),
-        ("Meta", lambda: Meta().chat(prompt)),
+        ("Groq", lambda: __import__("llm4free.llm.Auth.groq", fromlist=["Groq"]).Groq(api_key="key")),
+        ("HeckAI", lambda: __import__("llm4free.llm.heckai", fromlist=["HeckAI"]).HeckAI()),
     ]
-    
-    for name, chat_fn in providers:
+    for name, factory in providers:
         try:
-            return chat_fn()
+            client = factory()
+            return client.chat.completions.create(
+                model="auto",
+                messages=[{"role": "user", "content": prompt}],
+            ).choices[0].message.content
         except Exception as e:
             print(f"{name} failed, trying next...")
-    
-    raise Exception("All providers failed")
+    raise RuntimeError("All providers failed")
 ```
 
 ### Q: How do I save API keys securely?
@@ -592,26 +553,20 @@ def chat_with_fallback(prompt):
 **A:** Never hardcode API keys:
 
 ```python
-# ❌ Bad - hardcoded keys
-client = OpenAI(api_key="sk-1234567890")
+# Bad - hardcoded keys
+# client = Groq(api_key="gsk-1234567890")
 
-# ✓ Good - environment variables
+# Good - environment variables
 import os
-api_key = os.getenv("OPENAI_API_KEY")
-client = OpenAI(api_key=api_key)
+api_key = os.getenv("GROQ_API_KEY")
+from llm4free.llm.Auth.groq import Groq
+client = Groq(api_key=api_key)
 
-# ✓ Good - .env file
+# Good - .env file
 from dotenv import load_dotenv
 load_dotenv()  # Load from .env file
-api_key = os.getenv("OPENAI_API_KEY")
-client = OpenAI(api_key=api_key)
-
-# ✓ Good - configuration file
-import json
-with open("config.json") as f:
-    config = json.load(f)
-    api_key = config.get("openai_api_key")
-client = OpenAI(api_key=api_key)
+api_key = os.getenv("GROQ_API_KEY")
+client = Groq(api_key=api_key)
 ```
 
 ### Q: How do I use LLM4Free with asyncio?
@@ -620,16 +575,21 @@ client = OpenAI(api_key=api_key)
 
 ```python
 import asyncio
-from llm4free import GROQ
+from llm4free.llm.Auth.groq import Groq
 
 async def async_chat(prompt):
     loop = asyncio.get_event_loop()
-    client = GROQ(api_key="key")
-    # Run blocking call in thread pool
-    return await loop.run_in_executor(None, client.chat, prompt)
+    client = Groq(api_key="key")
+    return await loop.run_in_executor(
+        None,
+        lambda: client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+        ),
+    )
 
-# Use it
 response = await async_chat("Hello")
+print(response.choices[0].message.content)
 ```
 
 ### Q: How do I handle special characters in prompts?
@@ -639,14 +599,13 @@ response = await async_chat("Hello")
 ```python
 prompt = "你好 مرحبا שלום"  # Multiple languages
 
-client = GROQ(api_key="key")
-response = client.chat(prompt)
-print(response)  # Works fine
-
-# For edge cases, explicitly encode
-prompt = "Special chars: ñ, ü, é"
-prompt_encoded = prompt.encode('utf-8').decode('utf-8')
-response = client.chat(prompt_encoded)
+from llm4free.llm.heckai import HeckAI
+client = HeckAI()
+response = client.chat.completions.create(
+    model="auto",
+    messages=[{"role": "user", "content": prompt}],
+)
+print(response.choices[0].message.content)
 ```
 
 ### Q: How do I report a bug?
@@ -657,11 +616,14 @@ response = client.chat(prompt_encoded)
 2. Create a minimal reproducible example:
 
 ```python
-from llm4free import GROQ
+from llm4free.llm.heckai import HeckAI
 
-client = GROQ(api_key="your-key")
-response = client.chat("Simple test")
-print(response)  # Expected vs actual output
+client = HeckAI()
+response = client.chat.completions.create(
+    model="auto",
+    messages=[{"role": "user", "content": "Simple test"}],
+)
+print(response.choices[0].message.content)
 ```
 
 3. Include:

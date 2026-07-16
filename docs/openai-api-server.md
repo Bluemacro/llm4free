@@ -1,12 +1,23 @@
 # OpenAI-Compatible API Server (`llm4free.server`)
-> Last updated: 2025-12-20
-> Maintained by [LLM4Free](https://github.com/OEvortex/LLM4Free)
 
-LLM4Free's [`llm4free.server`](../llm4free/server/__init__.py:1) module provides a comprehensive OpenAI-compatible API server that serves AI models in OpenAI-compatible API format, making it usable wherever OpenAI API is expected. This server allows you to use any supported LLM4Free provider with tools and applications designed for OpenAI's API. The server exposes the same providers available in the LLM4Free Python client (`client.py`) through HTTP endpoints, enabling integration with any OpenAI-compatible application. For client-side integrations, see [docs/client.md](client.md).
+> **Last updated:** 2026-07-16
+> **Maintained by:** [LLM4Free](https://github.com/OEvortex/LLM4Free)
+
+LLM4Free's `llm4free.server` module provides a comprehensive OpenAI-compatible API server that serves AI models in OpenAI-compatible API format, making it usable wherever the OpenAI API is expected. This server allows you to use any supported LLM4Free provider with tools and applications designed for OpenAI's API. The server exposes the same providers available in the LLM4Free Python client (`client.py`) through HTTP endpoints, enabling integration with any OpenAI-compatible application. For client-side integrations, see [docs/client.md](client.md).
+
+> [!IMPORTANT]
+> **The server *is* the `Client`, exposed over HTTP.**
+> The server is a thin network layer on top of the unified `llm4free.client.Client`. Every request the server receives is resolved through the exact same model-resolution and failover logic as `Client`. As a result, the **same `model` strings** work over HTTP as they do in Python:
+> - `"auto"` — pick any working provider/model automatically.
+> - `"ProviderName/ModelName"` — force a specific provider (e.g. `"ChatGPT/gpt-4o"`).
+> - A bare model name (e.g. `"gpt-4o"`) — fuzzily matched across providers.
+>
+> So a `model="auto"` (or `model="ChatGPT/gpt-4o"`) call against `/v1/chat/completions` behaves identically to `client.chat.completions.create(model="auto")` / `client.chat.completions.create(model="ChatGPT/gpt-4o")` in-process. There is no separate provider-resolution path to learn — if it works in the `Client`, it works over the server, and vice-versa.
 
 ## Table of Contents
 
-1. [Core Components](#core-components)
+1. [Client vs Server](#client-vs-server)
+2. [Core Components](#core-components)
 2. [Server Configuration](#server-configuration)
 3. [Provider Management](#provider-management)
 4. [API Endpoints](#api-endpoints)
@@ -17,14 +28,55 @@ LLM4Free's [`llm4free.server`](../llm4free/server/__init__.py:1) module provides
 9. [Custom UI & Documentation](#custom-ui--documentation)
 10. [Integration Guide](#integration-guide)
 
-## Core Components
+---
 
-### [`server.py`](../llm4free/server/server.py:1)
+## Client vs Server
 
-The main server module that creates and configures the FastAPI application with OpenAI-compatible endpoints.
+The server and the `Client` are two faces of the same engine. The `Client` (`llm4free.client.Client`) is the in-process, Python-native way to talk to providers; the server is the same `Client` logic repackaged as HTTP endpoints. Both share provider discovery (`llm4free.llm`, `llm4free.TTI`, `llm4free.TTS`) and the exact same `model` resolution rules.
+
+> [!TIP]
+> You can launch the server **from the `Client`** without touching the `llm4free-server` console script. The `run_api()` / `start_server()` helpers live on the `llm4free.client` module and delegate straight to the server:
 
 ```python
-from llm4free.server.server import create_app, run_api, start_server
+from llm4free.client import Client, run_api, start_server
+
+# Start the OpenAI-compatible server programmatically.
+# The same model="auto" / model="Provider/Model" resolution applies over HTTP.
+start_server(host="0.0.0.0", port=8000)
+# or, with full control:
+# run_api(host="0.0.0.0", port=8000, workers=1, log_level="info")
+
+# The Client itself is the engine the server wraps:
+client = Client()
+response = client.chat.completions.create(
+    model="auto",  # identical to sending {"model": "auto"} to /v1/chat/completions
+    messages=[{"role": "user", "content": "Hello!"}],
+)
+print(response.choices[0].message.content)
+```
+
+**Side-by-side equivalence:**
+
+| Concern | `Client` (Python) | Server (HTTP) |
+| ------- | ----------------- | ------------- |
+| Chat | `client.chat.completions.create(model="auto", ...)` | `POST /v1/chat/completions` with `{"model": "auto", ...}` |
+| Force provider | `client.chat.completions.create(model="ChatGPT/gpt-4o", ...)` | `{"model": "ChatGPT/gpt-4o", ...}` |
+| Images | `client.images.generate(model="PollinationsAI/flux", prompt="...")` | `POST /v1/images/generations` with `{"model": "PollinationsAI/flux", ...}` |
+| Audio | `client.audio.speech.create(model="ElevenlabsTTS/default", input_text="...")` | `POST /v1/audio/speech` with `{"model": "ElevenlabsTTS/default", ...}` |
+
+> [!NOTE]
+> `run_api()` / `start_server()` are module-level helpers in `llm4free.client` (not instance methods). They require the `api` optional dependencies (`pip install "llm4free[api]"`).
+
+---
+
+## Core Components
+
+### [`server.py`](../llm4free/server/server.py)
+
+The main server module that creates and configures the FastAPI application with OpenAI-compatible endpoints. The console script `llm4free-server` (and its alias `llm4free-serve`) maps to `llm4free.server.server:main`.
+
+```python
+from llm4free.server import create_app, run_api, start_server
 
 # Create FastAPI app
 app = create_app()
@@ -34,16 +86,19 @@ start_server(port=8000, host="0.0.0.0")
 ```
 
 **Key Features:**
-- OpenAI-compatible API endpoints (v1/chat/completions, v1/models, etc.)
+- OpenAI-compatible API endpoints (`/v1/chat/completions`, `/v1/models`, etc.)
 - Automatic provider discovery and registration
 - Comprehensive error handling and logging
 - Interactive API documentation with custom UI
 - Support for streaming and non-streaming responses
 - Dynamic configuration through environment variables
+- Anthropic-compatible `/v1/messages` endpoint
+
+---
 
 ## Server Configuration
 
-### [`ServerConfig`](../llm4free/server/config.py:22)
+### [`ServerConfig`](../llm4free/server/config.py)
 
 Centralized configuration management for the API server.
 
@@ -66,32 +121,38 @@ config.update(
 | `host` | `str` | `"0.0.0.0"` | Server host address |
 | `port` | `int` | `8000` | Server port number |
 | `debug` | `bool` | `False` | Enable debug mode |
-| `cors_origins` | `List[str] | `["*"]` | CORS allowed origins |
+| `cors_origins` | `List[str]` | `["*"]` | CORS allowed origins |
 | `max_request_size` | `int` | `10MB` | Maximum request size |
 | `request_timeout` | `int` | `300` | Request timeout in seconds |
 | `auth_required` | `bool` | `False` | Require authentication |
 | `rate_limit_enabled` | `bool` | `False` | Enable rate limiting |
 | `request_logging_enabled` | `bool` | `True` (via env) | Enable request logging |
 
+---
+
 ## Provider Management
 
-### [`providers.py`](../llm4free/server/providers.py:1)
+### [`providers.py`](../llm4free/server/providers.py)
 
-Automatic provider discovery and management system with intelligent model resolution. The server dynamically discovers all OpenAI-compatible and TTI providers that don't require authentication.
+Automatic provider discovery and management system with intelligent model resolution. The server dynamically discovers all OpenAI-compatible, TTI, and TTS providers that don't require authentication.
 
 ```python
 from llm4free.server.providers import (
     initialize_provider_map,
     initialize_tti_provider_map,
+    initialize_tts_provider_map,
     resolve_provider_and_model,
     resolve_tti_provider_and_model,
+    resolve_tts_provider_and_model,
     get_provider_instance,
-    get_tti_provider_instance
+    get_tti_provider_instance,
+    get_tts_provider_instance,
 )
 
 # Initialize all providers at startup
 initialize_provider_map()
 initialize_tti_provider_map()
+initialize_tts_provider_map()
 
 # Resolve provider and model at runtime
 provider_class, model_name = resolve_provider_and_model("ChatGPT/gpt-4o")
@@ -101,22 +162,36 @@ provider = get_provider_instance(provider_class)
 ```
 
 **Key Features:**
-- Discovers providers automatically at startup from `llm4free.Provider.OPENAI`
+- Discovers providers automatically at startup from `llm4free.llm` (chat), `llm4free.TTI` (images), and `llm4free.TTS` (audio)
 - Initializes only providers with `required_auth=False`
 - Creates provider instance cache to avoid reinitialization overhead
-- Supports both chat completion and text-to-image provider discovery
+- Supports chat completion, text-to-image, and text-to-speech provider discovery
 - Handles model-to-provider mapping including provider-specific model names
 
-**Provider Features:**
-- Automatic discovery of OpenAI-compatible providers
-- Model validation and availability checking
-- Provider instance caching for performance
-- Support for both chat and image generation providers
-- Fallback provider configuration
+> [!NOTE]
+> The server historically scanned `llm4free.Provider.OPENAI`. That package no longer exists — discovery now scans `llm4free.llm` for OpenAI-compatible providers.
+
+---
 
 ## API Endpoints
 
 The server provides OpenAI-compatible API endpoints that mirror the OpenAI API specification, allowing drop-in replacement for applications that use OpenAI's API.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/v1/chat/completions` | Chat completions (streaming + non-streaming) |
+| `POST` | `/v1/images/generations` | Text-to-image generation |
+| `POST` | `/v1/audio/speech` | Text-to-speech synthesis |
+| `GET` | `/v1/models` | List chat completion models |
+| `GET` | `/v1/providers` | List chat completion providers |
+| `GET` | `/v1/TTI/models` | List text-to-image models |
+| `GET` | `/v1/TTI/providers` | List text-to-image providers |
+| `GET` | `/v1/TTS/models` | List text-to-speech models |
+| `GET` | `/v1/TTS/providers` | List text-to-speech providers |
+| `POST` | `/v1/messages` | Anthropic-compatible messages (mirrors `/v1/chat/completions`) |
+| `GET` | `/v1/messages` | List models (Anthropic-compatible) |
+| `GET` | `/search` | Unified web search across all engines |
+| `GET` | `/monitor/health` | Health check |
 
 ### Chat Completions
 
@@ -146,7 +221,7 @@ response = requests.post(
 ```
 
 **Supported Parameters:**
-- `model`: Provider/model format (e.g., "ChatGPT/gpt-4o", "Toolbaz/grok-4.1-fast")
+- `model`: `Provider/Model` format (e.g., `"ChatGPT/gpt-4o"`, `"Toolbaz/grok-4.1-fast"`), `"auto"`, or a bare model name that is fuzzily matched. These are exactly the same `model` specifications accepted by `Client` — see [Client vs Server](#client-vs-server).
 - `messages`: List of message objects with role and content
 - `temperature`, `top_p`, `n`, `stream`, `max_tokens`, `presence_penalty`, `frequency_penalty`, `logit_bias`, `user`, `stop`
 - Multimodal content support (text and image URLs)
@@ -177,17 +252,45 @@ response = requests.post(
 
 **Supported Parameters:**
 - `prompt`: Text description of the desired image
-- `model`: TTI provider/model format (e.g., "PollinationsAI/flux", "LeonardoAI/leonardo-ai")
+- `model`: TTI provider/model format (e.g., `"PollinationsAI/flux"`, `"LeonardoAI/leonardo-ai`)
 - `n`: Number of images to generate (1-10)
-- `size`: Image dimensions ("256x256", "512x512", "1024x1024")
-- `response_format`: "url" or "b64_json"
-- Additional provider-specific parameters (style, aspect_ratio, timeout, image_format, seed)
+- `size`: Image dimensions (`"256x256"`, `"512x512"`, `"1024x1024"`)
+- `response_format`: `"url"` or `"b64_json"`
+- Additional provider-specific parameters (`style`, `aspect_ratio`, `timeout`, `image_format`, `seed`)
+
+### Audio Speech
+
+**Endpoint:** `POST /v1/audio/speech`
+
+OpenAI-compatible text-to-speech endpoint.
+
+```python
+response = requests.post(
+    "http://localhost:8000/v1/audio/speech",
+    headers={
+        "Content-Type": "application/json"
+    },
+    json={
+        "model": "ElevenlabsTTS/default",
+        "input": "Hello from LLM4Free.",
+        "voice": "alloy",
+        "response_format": "mp3"
+    }
+)
+```
+
+**Supported Parameters:**
+- `model`: TTS provider/model format (e.g., `"ElevenlabsTTS/default"`)
+- `input`: Text to synthesize
+- `voice`: Voice identifier for the TTS provider
+- `response_format`: Audio format (`mp3`, `opus`, `aac`, `flac`, `wav`, `pcm`)
+- `instructions`, `stream`
 
 ### Model Listing
 
 **Endpoint:** `GET /v1/models`
 
-Lists all available models from providers that are automatically discovered and registered at startup.
+Lists all available chat completion models from providers that are automatically discovered and registered at startup.
 
 ```python
 response = requests.get(
@@ -200,22 +303,35 @@ for model in available_models:
     print(f"ID: {model['id']}, Owned by: {model['owned_by']}")
 ```
 
-### Additional Endpoints
+### Provider Information
 
-**Provider Information:** `GET /v1/providers`
-Provides detailed information about all available providers including their supported models and parameters.
+**Endpoint:** `GET /v1/providers`
 
-**Web Search:** `GET /search`
+Provides detailed information about all available chat completion providers including their supported models and parameters.
+
+```python
+response = requests.get("http://localhost:8000/v1/providers")
+providers = response.json()["providers"]
+for name, info in providers.items():
+    print(f"{name}: {info['model_count']} models")
+```
+
+> [!NOTE]
+> The image and audio providers each have their own listing endpoints: `GET /v1/TTI/providers` and `GET /v1/TTS/providers`. The `/v1/providers` endpoint returns **chat completion** providers only.
+
+### Web Search
+
+**Endpoint:** `GET /search`
+
 Unified web search endpoint supporting multiple search engines (DuckDuckGo, Google, Bing, etc.) with various search types.
 
-**Search Provider Info:** `GET /search/provider`
-Provides details about available search providers and their supported categories and parameters.
+---
 
 ## Starting the Server
 
 ### Command Line Interface
 
-The server provides a comprehensive CLI with environment variable support. The server can be started using the console script:
+The server provides a comprehensive CLI with environment variable support. The server can be started using the console script (entry point `llm4free.server.server:main`):
 
 ```bash
 # Basic startup
@@ -234,7 +350,7 @@ llm4free-server --port 8000 --host 0.0.0.0 --workers 4 --log-level info
 - `--workers`: Number of worker processes (default: 1)
 - `--log-level`: Log level (debug, info, warning, error, critical) (default: info)
 - `--default-provider`: Default provider to use (optional)
-- `--base-url`: Base URL for the API (e.g., /api/v1) (optional)
+- `--base-url`: Base URL for the API (e.g., `/api/v1`) (optional)
 - `--debug`: Run in debug mode (optional)
 
 ### Programmatic Startup
@@ -299,6 +415,8 @@ docker-compose --profile production up llm4free-api-production
 
 For detailed Docker deployment instructions, see [DOCKER.md](../DOCKER.md).
 
+---
+
 ## Usage Examples
 
 ### OpenAI Python Client
@@ -310,7 +428,7 @@ from openai import OpenAI
 
 # Initialize client with server URL
 client = OpenAI(
-    api_key="dummy-key", # API key is not required but may be expected by the client
+    api_key="dummy-key",  # API key is not required but may be expected by the client
     base_url="http://localhost:8000/v1"
 )
 
@@ -395,6 +513,16 @@ curl http://localhost:8000/v1/images/generations \
     "response_format": "url"
   }'
 
+# Text-to-speech
+curl http://localhost:8000/v1/audio/speech \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "ElevenlabsTTS/default",
+    "input": "Hello from LLM4Free.",
+    "voice": "alloy",
+    "response_format": "mp3"
+  }'
+
 # List available models
 curl http://localhost:8000/v1/models
 
@@ -424,9 +552,11 @@ const data = await response.json();
 console.log(data.choices[0].message.content);
 ```
 
+---
+
 ## Environment Variables
 
-The server supports comprehensive environment variable configuration through both direct environment variables and Docker. All environment variables are read at startup and used to configure the ServerConfig.
+The server supports comprehensive environment variable configuration through both direct environment variables and Docker. All environment variables are read at startup and used to configure the `ServerConfig`.
 
 ### Server Configuration
 
@@ -465,9 +595,11 @@ The server follows this configuration priority:
 
 For a complete list of supported environment variables and Docker deployment options, see [DOCKER.md](../DOCKER.md).
 
+---
+
 ## Error Handling
 
-### [`APIError`](../llm4free/server/exceptions.py:26)
+### [`APIError`](../llm4free/server/exceptions.py)
 
 Comprehensive error handling with OpenAI-compatible error responses.
 
@@ -502,8 +634,8 @@ raise APIError(
 
 The server provides comprehensive exception handling with detailed error responses for different error types:
 
-```python
-# Validation errors
+```json
+// Validation errors
 {
   "error": {
     "message": "Request validation error.",
@@ -518,8 +650,10 @@ The server provides comprehensive exception handling with detailed error respons
     "footer": "If you believe this is a bug, please file an issue at https://github.com/OEvortex/LLM4Free."
   }
 }
+```
 
-# HTTP errors
+```json
+// HTTP errors
 {
   "error": {
     "message": "Something went wrong.",
@@ -527,8 +661,10 @@ The server provides comprehensive exception handling with detailed error respons
     "footer": "If you believe this is a bug, please file an issue at https://github.com/OEvortex/LLM4Free."
   }
 }
+```
 
-# General server errors
+```json
+// General server errors
 {
   "error": {
     "message": "Internal server error: Details about the error",
@@ -536,6 +672,9 @@ The server provides comprehensive exception handling with detailed error respons
     "footer": "If you believe this is a bug, please file an issue at https://github.com/OEvortex/LLM4Free."
   }
 }
+```
+
+---
 
 ## Custom UI & Documentation
 
@@ -551,6 +690,8 @@ The root endpoint (`/`) serves a custom landing page with information about the 
 
 The documentation includes a custom CSS theme and a footer linking to the GitHub repository.
 
+---
+
 ## Integration Guide
 
 ### Using with Existing OpenAI Applications
@@ -558,7 +699,7 @@ The documentation includes a custom CSS theme and a footer linking to the GitHub
 Since the server provides fully OpenAI-compatible APIs, you can replace OpenAI API URLs in existing applications:
 
 1. **Update base URL**: Change from `https://api.openai.com/v1` to `http://your-server:8000/v1`
-2. **Model names**: Use LLM4Free provider/model format (e.g., "ChatGPT/gpt-4o", "Toolbaz/grok-4.1-fast")
+2. **Model names**: Use LLM4Free provider/model format (e.g., `"ChatGPT/gpt-4o"`, `"Toolbaz/grok-4.1-fast`)
 3. **API key**: API key is not required but may be expected by some clients
 
 ### Client Compatibility
@@ -572,10 +713,12 @@ The server is compatible with:
 ### Provider Selection Strategy
 
 When using provider/model pairs:
-- Format: `ProviderName/model_name` (e.g., "ChatGPT/gpt-4o", "Cloudflare/@cf/meta/llama-4-scout-17b-16e-instruct")
-- The server dynamically resolves available providers at startup
+- Format: `ProviderName/model_name` (e.g., `"ChatGPT/gpt-4o"`, `"Cloudflare/@cf/meta/llama-4-scout-17b-16e-instruct"`)
+- The server dynamically resolves available providers at startup (from `llm4free.llm`, `llm4free.TTI`, `llm4free.TTS`)
 - Providers that require authentication are excluded by default
 - If a provider isn't available, the request will result in an error
+
+---
 
 ## Troubleshooting
 
@@ -597,4 +740,4 @@ docker logs llm4free-api
 docker-compose logs llm4free-api
 ```
 
-*This documentation covers the comprehensive functionality of the [`llm4free.server`](../llm4free/server/__init__.py:1) module. For the most up-to-date information, refer to the source code and inline documentation.*
+*This documentation covers the comprehensive functionality of the `llm4free.server` module. For the most up-to-date information, refer to the source code and inline documentation.*

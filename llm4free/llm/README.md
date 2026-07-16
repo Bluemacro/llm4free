@@ -1,5 +1,5 @@
 <div align="center">
-  <a href="https://github.com/pyscout/LLM4Free">
+  <a href="https://github.com/OEvortex/llm4free">
     <img src="https://img.shields.io/badge/LLM4Free-OpenAI%20Compatible%20Providers-4285F4?style=for-the-badge&logo=openai&logoColor=white" alt="LLM4Free OpenAI Compatible Providers">
   </a>
   <br/>
@@ -8,7 +8,7 @@
 
   <p>
     <img src="https://img.shields.io/badge/Python-3.7+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.7+">
-    <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License: MIT">
+    <img src="https://img.shields.io/badge/License-Apache--2.0-blue?style=flat-square" alt="License: Apache-2.0">
     <img src="https://img.shields.io/badge/PRs-Welcome-brightgreen?style=flat-square" alt="PRs Welcome">
   </p>
 
@@ -30,8 +30,6 @@ The LLM4Free OpenAI-Compatible Providers module offers a standardized way to int
 Currently, the following providers are implemented with OpenAI-compatible interfaces:
 
 - DeepInfra
-- Glider
-- X0GPT
 - WiseCat
 - ExaAI
 - TypeGPT
@@ -173,52 +171,6 @@ print()  # Add a newline at the end
 ```
 
 
-### Basic Usage with X0GPT
-
-```python
-from llm4free.client import X0GPT
-
-# Initialize the client
-client = X0GPT()
-
-# Create a completion (non-streaming)
-response = client.chat.completions.create(
-    model="gpt-4",  # Model name doesn't matter for X0GPT
-    messages=[
-        {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": "Tell me about Python programming."}
-    ]
-)
-
-# Print the response
-print(response.choices[0].message.content)
-```
-
-### Streaming with X0GPT
-
-```python
-from llm4free.client import X0GPT
-
-# Initialize the client
-client = X0GPT()
-
-# Create a streaming completion
-stream = client.chat.completions.create(
-    model="gpt-4",  # Model name doesn't matter for X0GPT
-    messages=[
-        {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": "Write a short poem about programming."}
-    ],
-    stream=True
-)
-
-# Process the streaming response
-for chunk in stream:
-    if chunk.choices[0].delta.content:
-        print(chunk.choices[0].delta.content, end="", flush=True)
-print()  # Add a newline at the end
-```
-
 ### Basic Usage with WiseCat
 
 ```python
@@ -337,7 +289,7 @@ print()  # Add a newline at the end
 ### Basic Usage with IBM
 
 ```python
-from llm4free.Provider.Openai_comp.ibm import IBM
+from llm4free.llm.ibm import IBM
 
 # Initialize the client
 client = IBM(timeout=30)
@@ -357,7 +309,7 @@ print(response.choices[0].message.content)
 ### Streaming with IBM
 
 ```python
-from llm4free.Provider.Openai_comp.ibm import IBM
+from llm4free.llm.ibm import IBM
 
 # Initialize the client
 client = IBM()
@@ -381,7 +333,7 @@ print()  # Add a newline at the end
 ### Using Different IBM Granite Models
 
 ```python
-from llm4free.Provider.Openai_comp.ibm import IBM
+from llm4free.llm.ibm import IBM
 
 # Initialize the client
 client = IBM()
@@ -813,7 +765,7 @@ This architecture makes it easy to add new providers while maintaining a consist
 
 Want to add a new OpenAI-compatible provider? Follow these steps:
 
-1.  Create a new file in the `llm4free/Provider/OPENAI` directory
+1.  Create a new file in the `llm4free/llm/` directory
 2.  Implement the `OpenAICompatibleProvider` interface
 3.  Add appropriate tests
 4.  Update this README with information about the new provider
@@ -822,8 +774,6 @@ Want to add a new OpenAI-compatible provider? Follow these steps:
 
 - [OpenAI API Reference](https://platform.openai.com/docs/api-reference)
 - [DeepInfra Documentation](https://deepinfra.com/docs)
-- [Glider.so Website](https://glider.so/)
-- [X0GPT Website](https://x0-gpt.devwtf.in/)
 - [WiseCat Website](https://wise-cat-groq.vercel.app/)
 - [ExaAI Website](https://o3minichat.exa.ai/)
 - [Sambanova Website](https://sambanova.ai/)
@@ -836,6 +786,6 @@ Want to add a new OpenAI-compatible provider? Follow these steps:
 - [StandardInput Website](https://chat.standard-input.com/)
 
 <div align="center">
-  <a href="https://t.me/PyscoutAI"><img alt="Telegram Group" src="https://img.shields.io/badge/Telegram%20Group-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white"></a>
+  <a href="https://t.me/OEvortexAI"><img alt="Telegram Group" src="https://img.shields.io/badge/Telegram%20Group-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white"></a>
   <a href="https://buymeacoffee.com/oevortex"><img alt="Buy Me A Coffee" src="https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black"></a>
 </div>

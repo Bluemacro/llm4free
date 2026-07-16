@@ -275,9 +275,11 @@ def _get_available_provider_items(
     auth_required_providers: Set[str],
     excluded: Optional[List[str]],
     api_key: Optional[str],
+    *,
+    drop_auth: bool = True,
 ) -> List[Tuple[str, Type[ProviderT]]]:
     exclude = _normalized_name_set(excluded)
-    if api_key:
+    if api_key and not drop_auth:
         return [
             (name, cls) for name, cls in provider_registry.items() if name.casefold() not in exclude
         ]
@@ -627,6 +629,7 @@ class ClientCompletions(BaseCompletions):
             OPENAI_AUTH_REQUIRED,
             self._client.exclude,
             self._client.api_key,
+            drop_auth=self._client.drop_auth_providers,
         )
 
     def create(
@@ -934,6 +937,7 @@ class ClientImages(BaseImages):
             TTI_AUTH_REQUIRED,
             self._client.exclude_images,
             self._client.api_key,
+            drop_auth=self._client.drop_auth_providers,
         )
 
     def generate(
@@ -1151,6 +1155,7 @@ class ClientAudioSpeech:
             TTS_AUTH_REQUIRED,
             self._client.exclude_tts,
             self._client.api_key,
+            drop_auth=self._client.drop_auth_providers,
         )
 
     @staticmethod
@@ -1272,6 +1277,7 @@ class Client:
         exclude: List of provider names to exclude from chat completions.
         exclude_images: List of provider names to exclude from image generation.
         exclude_tts: List of provider names to exclude from audio generation.
+        drop_auth_providers: When True (default), exclude providers requiring auth.
         print_provider_info: Whether to print selected provider and model info.
         chat: ClientChat instance for chat completions.
         images: ClientImages instance for image generation.
@@ -1315,6 +1321,7 @@ class Client:
         exclude_images: Optional[List[str]] = None,
         exclude_tts: Optional[List[str]] = None,
         print_provider_info: bool = False,
+        drop_auth_providers: bool = True,
         **kwargs: Any,
     ):
         """
@@ -1325,8 +1332,8 @@ class Client:
                      this provider is prioritized in provider resolution. Optional.
             image_provider: Default provider class for image generation. If specified,
                            this provider is prioritized in image resolution. Optional.
-            api_key: API key for authenticated providers. If provided, enables access
-                    to providers that require authentication. Optional.
+            api_key: API key for authenticated providers. Optional. Note: auth-required
+                    providers are excluded by default unless ``drop_auth_providers=False``.
             proxies: Dictionary of proxy settings (e.g., {"http": "http://proxy:8080"}).
                     Applied to all provider requests. Optional.
             exclude: List of provider names to exclude from chat completion selection.
@@ -1337,6 +1344,10 @@ class Client:
                          Names are case-insensitive. Optional.
             print_provider_info: If True, prints selected provider name and model to stdout
                                 before each request. Useful for debugging. Default is False.
+            drop_auth_providers: When True (default), providers that require authentication
+                                 are excluded from resolution entirely — even if ``api_key``
+                                 is set. Set to False to allow auth-required providers when an
+                                 ``api_key`` is supplied. Optional.
             **kwargs: Additional keyword arguments stored for future use.
 
         Examples:
@@ -1367,6 +1378,7 @@ class Client:
         self.exclude_images = exclude_images or []
         self.exclude_tts = exclude_tts or []
         self.print_provider_info = print_provider_info
+        self.drop_auth_providers = drop_auth_providers
         self.kwargs = kwargs
 
         self._provider_cache = {}

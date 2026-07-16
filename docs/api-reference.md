@@ -1,41 +1,109 @@
 # API Reference
 
-> **Last updated:** 2026-01-24  
-> **Type:** Technical Reference  
-> **Audience:** Developers
+> Last updated: 2026-07-16
+> Type: Technical Reference
+> Audience: Developers
+
+This document describes the real, importable classes and methods in `llm4free`. Examples use only verified import paths.
 
 ## Table of Contents
 
 1. [Core Classes](#core-classes)
 2. [Provider Base Class](#provider-base-class)
-3. [Chat Methods](#chat-methods)
+3. [LLM Providers (OpenAI-Compatible)](#llm-providers-openai-compatible)
 4. [Client API](#client-api)
-5. [Exceptions](#exceptions)
-6. [Type Definitions](#type-definitions)
+5. [Text-to-Image (TTI)](#text-to-image-tti)
+6. [Text-to-Speech (TTS)](#text-to-speech-tts)
+7. [Model Registry](#model-registry)
+8. [Exceptions](#exceptions)
+9. [Type Definitions](#type-definitions)
 
 ---
 
 ## Core Classes
 
-### AIbase.Provider
+### `Client` (unified entry point)
 
-The base class for all AI providers. Do not use this directly; instead, use the specific provider implementations.
+The `Client` is the recommended entry point for everyday use. It wraps all OpenAI-compatible chat, image, and audio providers behind one OpenAI-compatible interface and performs automatic provider selection, model resolution, and failover.
+
+```python
+from llm4free.client import Client
+
+client = Client()  # optional: api_key=, proxies=, exclude=, exclude_images=, exclude_tts=, print_provider_info=
+```
+
+**Three model-specification modes** (identical across `chat`, `images`, and `audio`):
+
+| `model` value | Meaning |
+| ------------- | ------- |
+| `"auto"` | The `Client` picks any working provider/model automatically (the smartest default). |
+| `"ProviderName/ModelName"` | Forces a specific provider, e.g. `"ChatGPT/gpt-4o"` or `"PollinationsAI/flux"`. |
+| `"ModelName"` (bare) | Fuzzily matched across all providers, e.g. `"gpt-4o"`. |
+
+```python
+# 1. Auto — pick any working provider/model
+client.chat.completions.create(model="auto", messages=[{"role": "user", "content": "Hi"}])
+
+# 2. Force a specific provider/model
+client.chat.completions.create(model="ChatGPT/gpt-4o", messages=[{"role": "user", "content": "Hi"}])
+
+# 3. Bare model name — fuzzily matched
+client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": "Hi"}])
+```
+
+Class-method helpers give runtime-discovered provider lists: `Client.get_chat_providers()`, `Client.get_free_chat_providers()`, `Client.get_image_providers()`, `Client.get_tts_providers()`. See [Client API](#client-api) for the full surface (chat/image/audio + `run_api`/`start_server`).
+
+### `AIbase.Provider`
+
+The abstract base class for the legacy (non-OpenAI-compatible) providers. Subclasses implement `ask()` and `get_message()`; `chat()` is provided and supports an automatic XML tool-calling loop when tools are supplied.
 
 ```python
 from llm4free.AIbase import Provider
 ```
 
 **Key attributes:**
-- `required_auth` (bool) — Whether the provider requires API authentication
-- `conversation` (Any) — Stores conversation history if enabled
+
+- `required_auth` (bool) — Whether the provider requires API authentication. Defaults to `False`.
+- `conversation` (Any) — Stores conversation history when `is_conversation=True`.
+- `last_response` (ResponseType) — The most recent raw response from `ask()`.
+
+**Key methods:**
+
+- `ask(prompt, **kwargs)` — Send a prompt; returns the raw response (str / dict / generator).
+- `chat(prompt, **kwargs)` — Send a prompt and return the extracted message string (or generator when `stream=True`).
+- `get_message(response)` — Extract the message text from a raw response.
+- `register_tools(tools)` — Register `Tool` instances for function calling.
+
+> [!NOTE]
+> Most everyday usage goes through the OpenAI-compatible providers in `llm4free.llm` (see below) or the unified `Client`. The `Provider` base class is primarily relevant when writing or extending legacy providers.
+
+### `AIbase.Tool`
+
+A dataclass describing a callable tool for function calling, convertible to an OpenAI tool definition.
+
+```python
+from llm4free.AIbase import Tool
+
+def get_weather(city: str) -> str:
+    return f"Weather in {city}: Sunny, 75F"
+
+tool = Tool(
+    name="get_weather",
+    description="Get current weather for a city",
+    parameters={"city": {"type": "string", "description": "City name"}},
+    implementation=get_weather,
+)
+print(tool.to_dict())   # OpenAI-compatible tool definition
+print(tool.execute({"city": "London"}))
+```
 
 ---
 
 ## Provider Base Class
 
-### Abstract Methods
+### Abstract / Overridable Methods
 
-All provider implementations must implement these three methods:
+All `Provider` subclasses implement these:
 
 #### `ask()`
 
@@ -51,30 +119,15 @@ def ask(
     conversationally: bool = False,
     **kwargs: Any,
 ) -> Response:
-    """
-    Send a prompt to the provider.
-    
-    Args:
-        prompt (str): The user's input prompt
-        stream (bool): Return streaming response if True. Default: False
-        raw (bool): Return raw data without post-processing. Default: False
-        optimizer (Optional[str]): Apply a system prompt optimizer. See AwesomePrompts
-        conversationally (bool): Maintain conversation history. Default: False
-        **kwargs: Provider-specific arguments
-    
-    Returns:
-        Response: Either a string, dict, or generator depending on parameters
-    
-    Raises:
-        AIProviderError: If the provider encounters an error
-    
-    Example:
-        >>> from llm4free import Meta
-        >>> ai = Meta()
-        >>> response = ai.ask("Hello")
-        >>> print(response)
-    """
+    """Send a prompt to the provider and return the raw response."""
 ```
+
+- `prompt` (str): The user's input prompt.
+- `stream` (bool): Return a streaming response if True. Default: `False`.
+- `raw` (bool): Return raw data without post-processing. Default: `False`.
+- `optimizer` (Optional[str]): Apply a system prompt optimizer.
+- `conversationally` (bool): Maintain conversation history. Default: `False`.
+- **Returns:** `str`, `dict`, or generator depending on parameters.
 
 #### `chat()`
 
@@ -89,128 +142,95 @@ def chat(
     conversationally: bool = False,
     **kwargs: Any,
 ) -> Union[str, Generator[str, None, None]]:
-    """
-    Send a prompt and get a clean message response.
-    
-    Args:
-        prompt (str): The user's input prompt
-        stream (bool): Stream the response if True. Default: False
-        optimizer (Optional[str]): Apply system prompt optimization
-        conversationally (bool): Use conversation history. Default: False
-        **kwargs: Provider-specific arguments
-    
-    Returns:
-        str | Generator[str, None, None]: The message response
-    
-    Example:
-        >>> from llm4free import GROQ
-        >>> client = GROQ(api_key="YOUR_KEY")
-        >>> response = client.chat("Explain machine learning")
-        >>> print(response)
-        
-        >>> # With streaming
-        >>> for chunk in client.chat("Write a poem", stream=True):
-        ...     print(chunk, end="", flush=True)
-    """
+    """Send a prompt and get a clean message response."""
+```
+
+- **Returns:** `str` or `Generator[str, None, None]`.
+
+```python
+from llm4free.AIbase import Provider
+
+# Subclass usage; for built-in providers prefer the llm.* modules below.
+# provider = SomeProvider()
+# response = provider.chat("Explain machine learning")
+# print(response)
 ```
 
 #### `get_message()`
 
-Extracts the message from a response object.
+Extracts the message text from a raw response object.
 
 ```python
 def get_message(self, response: Response) -> str:
-    """
-    Extract the message text from a provider response.
-    
-    Args:
-        response (Response): The response from ask() method
-    
-    Returns:
-        str: The extracted message text
-    
-    Example:
-        >>> response = ai.ask("What is AI?", raw=True)
-        >>> message = ai.get_message(response)
-        >>> print(message)
-    """
+    """Extract the message text from a provider response."""
 ```
 
 ---
 
-## Chat Methods
+## LLM Providers (OpenAI-Compatible)
 
-### Common Parameters
-
-Most chat providers accept these standard parameters:
+All providers in `llm4free.llm` subclass `OpenAICompatibleProvider` and expose the familiar `chat.completions.create(...)` interface. Import them by their module path.
 
 ```python
-# All providers support these
-client.chat(
-    prompt="Your question here",          # Required: The user's prompt
-    stream=False,                          # Optional: Enable streaming
-    optimizer=None,                        # Optional: System prompt optimizer
-    conversationally=False,                # Optional: Use conversation history
-)
-
-# OpenAI and compatible providers also support
-client.chat(
-    temperature=0.7,                       # Control randomness (0-2)
-    top_p=0.9,                             # Nucleus sampling
-    max_tokens=500,                        # Response length limit
-    presence_penalty=0,                    # Reduce repetition
-    frequency_penalty=0,                   # Reduce common words
-)
+from llm4free.llm.heckai import HeckAI        # Free, no API key
+from llm4free.llm.artingai import ArtingAI    # Free, no API key
+from llm4free.llm.Auth.groq import Groq       # Requires API key
+from llm4free.llm.Auth.deepinfra import DeepInfra  # Requires API key
 ```
 
-### Streaming Examples
+> [!TIP]
+> `HeckAI` and `ArtingAI` are free and need no key. `Groq` and `DeepInfra` require an `api_key`. The full set of auth-required providers (e.g. `Cerebras`, `HuggingFace`, `Nvidia`, `OpenRouter`, `Sambanova`, `TogetherAI`, `Upstage`, `Zenmux`) is exported from `llm4free.llm.Auth`.
+
+Example:
 
 ```python
-from llm4free import GROQ
+from llm4free.llm.heckai import HeckAI
 
-client = GROQ(api_key="your-api-key")
-
-# Stream text response
-print("Streaming response:")
-for chunk in client.chat("Write a haiku", stream=True):
-    print(chunk, end="", flush=True)
-
-print("\n")
-
-# Collect streamed response
-def collect_stream(generator):
-    full_response = ""
-    for chunk in generator:
-        full_response += chunk
-    return full_response
-
-full_text = collect_stream(client.chat("Your prompt", stream=True))
+client = HeckAI()
+response = client.chat.completions.create(
+    model="google/gemini-2.5-flash-preview",
+    messages=[{"role": "user", "content": "What is artificial intelligence?"}],
+)
+print(response.choices[0].message.content)
 ```
 
-### Conversation Management
+Auth-required providers take an `api_key`:
 
 ```python
-from llm4free import Meta
+from llm4free.llm.Auth.groq import Groq
 
-# Enable conversation mode to maintain context
-ai = Meta(is_conversation=True)
+client = Groq(api_key="your-groq-key")
+response = client.chat.completions.create(
+    model="llama-3.3-70b-versatile",
+    messages=[{"role": "user", "content": "Explain machine learning simply"}],
+)
+print(response.choices[0].message.content)
+```
 
-# First turn
-response1 = ai.chat("My name is Alice")
-print(response1)
+### Streaming and Standard Parameters
 
-# Second turn - context is preserved
-response2 = ai.chat("What is my name?")  # AI remembers "Alice"
-print(response2)
+OpenAI-compatible providers accept `stream`, `temperature`, `max_tokens`, `top_p`, and `tools`:
+
+```python
+from llm4free.llm.heckai import HeckAI
+
+client = HeckAI()
+stream = client.chat.completions.create(
+    model="google/gemini-2.5-flash-preview",
+    messages=[{"role": "user", "content": "Write a short story"}],
+    stream=True,
+)
+for chunk in stream:
+    if chunk.choices[0].delta.content:
+        print(chunk.choices[0].delta.content, end="")
 ```
 
 ---
 
 ## Client API
 
-### Unified Client
-
-The `llm4free.client` module provides a unified interface for interacting with all providers.
+> [!NOTE]
+> **Start here.** The unified `llm4free.client.Client` is the recommended way to use LLM4Free. It provides a unified interface over all providers with automatic provider selection and failover, and accepts the same `model` strings (`"auto"`, `"Provider/Model"`, or a bare model name) as the server.
 
 ```python
 from llm4free.client import Client
@@ -225,9 +245,9 @@ response = client.chat.completions.create(
 )
 print(response.choices[0].message.content)
 
-# Specify provider and model
+# Specify a provider/model explicitly (ProviderName/ModelName)
 response = client.chat.completions.create(
-    model="GROQ/llama-3.1-8b-instant",
+    model="ChatGPT/gpt-4o",
     messages=[{"role": "user", "content": "Hello"}]
 )
 print(response.choices[0].message.content)
@@ -236,7 +256,7 @@ print(response.choices[0].message.content)
 stream = client.chat.completions.create(
     model="auto",
     messages=[{"role": "user", "content": "Write a story"}],
-    stream=True
+    stream=True,
 )
 for chunk in stream:
     if chunk.choices[0].delta.content:
@@ -245,25 +265,88 @@ for chunk in stream:
 
 ### Available Providers
 
-Common providers available in the client:
+The client discovers providers dynamically. A representative sample:
 
-| Provider | Required Auth | Notes |
-|----------|--------------|-------|
-| `Meta` | No | Free, no API key needed |
-| `GROQ` | Yes | Fast inference, free tier available |
-| `OpenAI` | Yes | GPT models |
-| `GEMINI` | Yes | Google's Gemini models |
-| `Cohere` | Yes | Command models |
-| `OpenRouter` | Yes | Multi-model provider |
-| `TogetherAI` | Yes | Open models |
+| Provider        | Module Path                          | Required Auth | Notes                       |
+| --------------- | ------------------------------------ | ------------- | --------------------------- |
+| `HeckAI`        | `llm4free.llm.heckai`                | No            | Free, no API key needed     |
+| `ArtingAI`      | `llm4free.llm.artingai`              | No            | Free, no API key needed     |
+| `Groq`          | `llm4free.llm.Auth.groq`             | Yes           | Fast inference, free tier   |
+| `DeepInfra`     | `llm4free.llm.Auth.deepinfra`        | Yes           | Open models                |
+| `OpenRouter`    | `llm4free.llm.Auth`                  | Yes           | Multi-model provider        |
+| `TogetherAI`    | `llm4free.llm.Auth`                  | Yes           | Open models                |
 
-For a complete list, see [Provider Documentation](../Provider.md)
+For the full list, see [`Provider.md`](../Provider.md) and `client.list_providers()`.
+
+---
+
+## Text-to-Image (TTI)
+
+TTI providers subclass `TTICompatibleProvider` and expose an `images.generate(...)` method. Import them from `llm4free.TTI`.
+
+```python
+from llm4free.TTI import PollinationsAI
+
+generator = PollinationsAI()
+response = generator.images.generate(
+    prompt="A peaceful river in autumn",
+    size="1024x1024",
+)
+print(response.data)  # List of generated image objects
+```
+
+> [!NOTE]
+> TTI provider classes are `PollinationsAI`, `BingImageAI`, `Lexica`, `RaphaelAI`, `StableHordeAI`, `TogetherImage`, `MiragicAI`, `PerchanceAI`, `VisualGPT`, `MagicHourAI`, `MagicStudioAI`, `NoLoginTool`, `OneFreeAI`. Verify the exact `generate` parameters per provider via `help()`.
+
+---
+
+## Text-to-Speech (TTS)
+
+TTS providers subclass `BaseTTSProvider` and expose `audio.speech.create(...)` (or `create_speech(...)`). Import them from `llm4free.TTS`.
+
+```python
+from llm4free.TTS import ElevenlabsTTS
+
+tts = ElevenlabsTTS(api_key="your-key")
+audio_path = tts.audio.speech.create(
+    input="Hello from LLM4Free",
+    voice="alloy",
+)
+print(f"Audio saved to: {audio_path}")
+```
+
+> [!NOTE]
+> TTS provider classes include `ElevenlabsTTS`, `DeepgramTTS`, `KittenTTS`, `LuxTTS`, `MurfAITTS`, `OpenAIFMTTS`, `ParlerTTS`, `PocketTTS`, `QwenTTS`, `SherpaTTS`, `StreamElements`, `TTSAI`, `TTSOpenTTS`, `XLNKTTS`. Some require an `api_key`.
+
+---
+
+## Model Registry
+
+The `model` object exposes the available models and voices across providers.
+
+```python
+from llm4free import model
+
+# LLM models
+model.llm.list()       # Dict[provider, List[model_name]]
+model.llm.get("HeckAI")  # List of models for a provider
+model.llm.summary()    # Counts of providers and models
+
+# TTS voices
+model.tts.list()       # Dict[provider, voices]
+model.tts.get("ElevenlabsTTS")
+
+# TTI models
+model.tti.list()       # Dict[provider, List[model_name]]
+model.tti.get("PollinationsAI")
+model.tti.providers()  # Detailed provider metadata
+```
 
 ---
 
 ## Exceptions
 
-### AIProviderError
+### `AIProviderError`
 
 Base exception for provider-related errors.
 
@@ -271,31 +354,13 @@ Base exception for provider-related errors.
 from llm4free.exceptions import AIProviderError
 
 try:
-    response = ai.chat("prompt")
+    response = client.chat.completions.create(...)
 except AIProviderError as e:
     print(f"Provider error: {e}")
 ```
 
-### Common Error Scenarios
-
-```python
-from llm4free import OpenAI
-from llm4free.exceptions import AIProviderError
-
-client = OpenAI(api_key="invalid-key")
-
-try:
-    response = client.chat("Hello")
-except AIProviderError as e:
-    if "401" in str(e):
-        print("Invalid API key")
-    elif "429" in str(e):
-        print("Rate limited - wait before retrying")
-    else:
-        print(f"Unknown error: {e}")
-except Exception as e:
-    print(f"Network or other error: {e}")
-```
+> [!TIP]
+> When using the unified `Client`, inspect the error string for HTTP status hints (e.g. `"401"` for auth, `"429"` for rate limits) and retry with backoff.
 
 ---
 
@@ -310,9 +375,10 @@ Response = Union[Dict[str, Any], Generator[Any, None, None], str]
 ```
 
 The response can be:
-- **str** — Simple string response
-- **Dict** — Complex response with metadata (raw response from `ask()`)
-- **Generator** — Stream of chunks when `stream=True`
+
+- **str** — Simple string response.
+- **Dict** — Complex response with metadata (raw response from `ask()`).
+- **Generator** — Stream of chunks when `stream=True`.
 
 ### Message Format
 
@@ -338,152 +404,6 @@ message = {
         }
     ]
 }
-```
-
----
-
-## Code Examples
-
-### Basic Chat
-
-```python
-from llm4free import GROQ
-
-# Initialize
-client = GROQ(api_key="your-groq-api-key")
-
-# Simple chat
-response = client.chat("What is Python?")
-print(response)
-
-# Output:
-# Python is a high-level, interpreted programming language...
-```
-
-### Multi-turn Conversation
-
-```python
-from llm4free import Meta
-
-ai = Meta(is_conversation=True)
-
-# Turn 1
-ai.chat("I like programming")
-# Output: That's great! Programming is a valuable skill...
-
-# Turn 2
-response = ai.chat("What languages should I learn?")
-# AI considers previous messages in context
-print(response)
-```
-
-### Image Generation
-
-```python
-from llm4free.Provider.TTI import Pollinations
-
-generator = Pollinations()
-
-# Generate image
-image_path = generator.generate_image(
-    prompt="A peaceful river in autumn",
-    size="1024x1024"
-)
-
-print(f"Image saved to: {image_path}")
-```
-
-### Error Handling
-
-```python
-from llm4free import OpenAI
-from llm4free.exceptions import AIProviderError
-
-client = OpenAI(api_key="your-key")
-
-try:
-    response = client.chat("Hello")
-except AIProviderError as e:
-    print(f"Provider error: {e}")
-except TimeoutError:
-    print("Request timed out - try again")
-except Exception as e:
-    print(f"Unexpected error: {e}")
-```
-
-### With Decorators
-
-```python
-from llm4free import GROQ
-from llm4free.AIutel import retry
-
-@retry(max_attempts=3, delay=2)
-def chat_with_retry(prompt: str) -> str:
-    client = GROQ(api_key="your-key")
-    return client.chat(prompt)
-
-# Call will retry up to 3 times if it fails
-response = chat_with_retry("Your prompt here")
-```
-
----
-
-## Common Patterns
-
-### Fallback to Multiple Providers
-
-```python
-from llm4free import GROQ, OpenAI, Meta
-
-def chat_with_fallback(prompt: str) -> str:
-    providers = [
-        ("GROQ", lambda: GROQ(api_key="key").chat(prompt)),
-        ("OpenAI", lambda: OpenAI(api_key="key").chat(prompt)),
-        ("Meta", lambda: Meta().chat(prompt)),
-    ]
-    
-    for name, chat_fn in providers:
-        try:
-            return chat_fn()
-        except Exception as e:
-            print(f"{name} failed: {e}")
-            continue
-    
-    raise Exception("All providers failed")
-```
-
-### Batch Processing
-
-```python
-from llm4free import GROQ
-
-client = GROQ(api_key="your-key")
-prompts = ["What is AI?", "Explain ML", "Define DL"]
-
-responses = []
-for prompt in prompts:
-    response = client.chat(prompt)
-    responses.append(response)
-    
-    # Parse and process each response
-    print(f"Q: {prompt}")
-    print(f"A: {response[:100]}...\n")
-```
-
-### Streaming with Progress
-
-```python
-from llm4free import GROQ
-import sys
-
-client = GROQ(api_key="your-key")
-
-print("Generating response...")
-for chunk in client.chat("Write a story", stream=True):
-    print(chunk, end="", flush=True)
-    sys.stdout.flush()
-
-print()  # Newline at end
 ```
 
 ---

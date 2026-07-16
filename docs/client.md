@@ -1,12 +1,16 @@
 # LLM4Free Python Client (`llm4free/client.py`)
 
-> Last updated: 2026-03-31  
-> Maintained by: OEvortex
+> **Last updated:** 2026-07-16
+> **Maintained by:** OEvortex
 
 `llm4free.client.Client` is the unified Python entry point for LLM4Free providers. It exposes an OpenAI-style surface for chat completions, image generation, and audio speech synthesis while handling dynamic provider discovery, intelligent model resolution, automatic failover, and per-process provider instance caching.
 
+> [!TIP]
+> **Start here.** The unified `Client` is the recommended way to use LLM4Free. Set `model="auto"` and the client picks any working provider/model and automatically fails over if one is down — no need to import individual provider classes. This is the smartest, lowest-friction path and the main differentiator versus libraries that require you to pick a provider by hand.
+
 ## Table of Contents
 
+- [Why the Unified Client?](#why-the-unified-client)
 - [Architecture](#architecture)
 - [Quick Start](#quick-start)
 - [Client Initialization](#client-initialization)
@@ -22,6 +26,23 @@
 - [Debug Tips](#debug-tips)
 - [Internal Functions](#internal-functions)
 - [Related Docs](#related-docs)
+
+---
+
+## Why the Unified Client?
+
+Most libraries that aggregate AI providers make you choose a provider class and a model up front, then handle failures yourself. The LLM4Free `Client` flips that around:
+
+| Capability | Unified `Client` | Raw provider classes |
+| ---------- | ---------------- | -------------------- |
+| Pick a model | `model="auto"` picks any working provider/model | You pick the provider **and** model |
+| Failover | Automatic, tiered (exact → fuzzy → any) | None — you must `try/except` and retry |
+| Fuzzy model matching | Built in (`difflib`, 50% cutoff) | Not available |
+| One interface for chat/images/audio | Yes (`client.chat`, `client.images`, `client.audio`) | Separate imports per provider type |
+| Debugging | `print_provider_info=True` + `last_provider` | Manual |
+
+> [!NOTE]
+> You can still use raw provider classes (e.g. `from llm4free.llm.heckai import HeckAI`) when you want full control. The `Client` is the recommended default; provider classes remain available for fine-grained use.
 
 ---
 
@@ -53,30 +74,71 @@ Client
 
 Each namespace (`chat`, `images`, `audio`) maintains its own provider registry, resolution logic, and fallback queue. The parent `Client` instance coordinates shared configuration (API keys, proxies, exclusions) and caches provider instances across all namespaces.
 
+> [!NOTE]
+> Provider discovery scans the `llm4free.llm` package for OpenAI-compatible providers, `llm4free.TTI` for image providers, and `llm4free.TTS` for audio providers. The legacy `llm4free.Provider.Openai_comp` path no longer exists — import providers from `llm4free.llm` (e.g. `from llm4free.llm.Auth.groq import Groq`).
+
 ---
 
 ## Quick Start
+
+The fastest way to use LLM4Free is the unified `Client` with `model="auto"`. The client selects a working provider, and if it fails, transparently falls back to another.
 
 ```python
 from llm4free.client import Client
 
 client = Client(print_provider_info=True)
 
-# Chat completion with auto provider/model selection
+# Chat completion with AUTO provider/model selection (recommended default)
 chat = client.chat.completions.create(
     model="auto",
     messages=[{"role": "user", "content": "Summarize LLM4Free in one sentence."}],
 )
 print(chat.choices[0].message.content)
 
-# Image generation
+# Force a SPECIFIC provider/model with the "Provider/Model" syntax
+chat = client.chat.completions.create(
+    model="GPT4Free/gpt-4o-mini",
+    messages=[{"role": "user", "content": "Explain auto-failover in one sentence."}],
+)
+print(chat.choices[0].message.content)
+```
+
+### Three ways to specify a model
+
+The `model` argument is the same across `chat`, `images`, and `audio`. There are three supported forms:
+
+1. **`"auto"`** — Let the client pick any available provider and model. This is the recommended default and the one-line path to resilience: if the selected provider is down, the client fails over automatically.
+
+   ```python
+   client.chat.completions.create(model="auto", messages=[...])
+   ```
+
+2. **`"ProviderName/ModelName"`** — Pin an exact provider and model. Case-insensitive on the provider name. If the provider is unavailable, the client still falls back to others.
+
+   ```python
+   # Provider name (case-insensitive) + "/" + model name
+   client.chat.completions.create(model="GPT4Free/gpt-4o-mini", messages=[...])
+   client.images.generate(model="StableDiffusion/flux", prompt="...")
+   ```
+
+3. **Bare model name** — Pass just a model string and the client resolves it across all providers. It tries an exact match, then a substring match, then fuzzy matching (`difflib`, 50% cutoff), and finally a random provider if nothing matches.
+
+   ```python
+   client.chat.completions.create(model="gpt-4o-mini", messages=[...])  # fuzzy-matched provider
+   ```
+
+> [!TIP]
+> The `Provider/Model` form is the most reproducible: it forces the exact provider and model while still keeping automatic failover as a safety net. Use `auto` for maximum resilience, and a bare name when you care about the model but not who serves it.
+
+```python
+# Image generation (auto)
 image = client.images.generate(
     prompt="A neon owl in a futuristic city",
     model="auto",
 )
 print(image.data[0].url)
 
-# Audio speech generation
+# Audio speech generation (auto)
 audio_path = client.audio.speech.create(
     input_text="Hello from LLM4Free.",
     model="auto",
@@ -132,12 +194,12 @@ client = Client(
 )
 
 # With specific default providers
-from llm4free.Provider.Openai_comp.groq import Groq
-from llm4free.Provider.TTI.stable import StableDiffusion
+from llm4free.llm.Auth.groq import Groq
+from llm4free.TTI.stablehorde import StableHordeAI
 
 client = Client(
     provider=Groq,
-    image_provider=StableDiffusion,
+    image_provider=StableHordeAI,
 )
 ```
 
@@ -208,7 +270,7 @@ for chunk in client.chat.completions.create(
         print(delta, end="", flush=True)
 
 # With specific provider
-from llm4free.Provider.Openai_comp.groq import Groq
+from llm4free.llm.Auth.groq import Groq
 response = client.chat.completions.create(
     model="llama-3-70b",
     messages=[{"role": "user", "content": "Explain recursion."}],
@@ -274,10 +336,10 @@ response = client.images.generate(
 print(response.data[0].url)
 
 # Using specific provider
-from llm4free.Provider.TTI.stable import StableDiffusion
+from llm4free.TTI.stablehorde import StableHordeAI
 response = client.images.generate(
     prompt="A cat wearing sunglasses",
-    provider=StableDiffusion,
+    provider=StableHordeAI,
 )
 
 # Using create() alias (OpenAI-style)
@@ -285,6 +347,13 @@ response = client.images.create(
     prompt="A robot painting a picture",
     model="auto",
 )
+
+# Pin a specific backend with the Provider/Model syntax
+response = client.images.generate(
+    prompt="A cyberpunk city at night",
+    model="PollinationsAI/flux",
+)
+print(response.data[0].url)
 ```
 
 ### Tracking Last Provider
@@ -358,7 +427,7 @@ for chunk in client.audio.speech.create(
     pass
 
 # Using specific provider
-from llm4free.Provider.TTS.elevenlabs import ElevenlabsTTS
+from llm4free.TTS.elevenlabs import ElevenlabsTTS
 audio_path = client.audio.speech.create(
     input_text="Hello world",
     provider=ElevenlabsTTS,
@@ -617,7 +686,7 @@ client = Client(
 ### Per-Call Provider Override
 
 ```python
-from llm4free.Provider.Openai_comp.groq import Groq
+from llm4free.llm.Auth.groq import Groq
 
 # Use Groq for this specific call regardless of auto resolution
 response = client.chat.completions.create(
@@ -681,11 +750,11 @@ If the API dependencies are not installed, these functions raise `ImportError`.
 
 4. **Test with specific provider first**:
    ```python
-   from llm4free.Provider.Openai_comp.gpt4free import GPT4Free
+   from llm4free.llm.chatgpt import ChatGPT
    response = client.chat.completions.create(
        model="gpt-4o-mini",
        messages=[...],
-       provider=GPT4Free,
+       provider=ChatGPT,
    )
    ```
 
@@ -703,9 +772,9 @@ These module-level functions support the client's provider discovery:
 
 | Function | Description |
 |----------|-------------|
-| `load_openai_providers()` | Dynamically loads all OpenAI-compatible provider classes from `llm4free.Provider.Openai_comp`. Returns `(provider_map, auth_required_set)`. |
-| `load_tti_providers()` | Dynamically loads all TTI provider classes from `llm4free.Provider.TTI`. Returns `(provider_map, auth_required_set)`. |
-| `load_tts_providers()` | Dynamically loads all TTS provider classes from `llm4free.Provider.TTS`. Returns `(provider_map, auth_required_set)`. |
+| `load_openai_providers()` | Dynamically loads all OpenAI-compatible provider classes from `llm4free.llm`. Returns `(provider_map, auth_required_set)`. |
+| `load_tti_providers()` | Dynamically loads all TTI provider classes from `llm4free.TTI`. Returns `(provider_map, auth_required_set)`. |
+| `load_tts_providers()` | Dynamically loads all TTS provider classes from `llm4free.TTS`. Returns `(provider_map, auth_required_set)`. |
 | `_get_models_safely(provider_cls, client)` | Safely retrieves models from a provider class, handling all exceptions. Uses client cache if available. |
 | `_get_tts_models_safely(provider_cls)` | Retrieves TTS models from `SUPPORTED_MODELS` or `AVAILABLE_MODELS` class attributes. Defaults to `["gpt-4o-mini-tts"]`. |
 | `_normalized_name_set(values)` | Converts a list of provider names to a case-normalized set for exclusion matching. |

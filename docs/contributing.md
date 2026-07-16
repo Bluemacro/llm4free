@@ -609,11 +609,14 @@ Include runnable examples:
 
 ```python
 # ✓ Good - complete, runnable example
-from llm4free import GROQ
+from llm4free.llm.Auth.groq import Groq
 
-client = GROQ(api_key="your-key")
-response = client.chat("What is machine learning?")
-print(response)
+client = Groq(api_key="your-key")
+response = client.chat.completions.create(
+    model="llama-3.3-70b-versatile",
+    messages=[{"role": "user", "content": "What is machine learning?"}],
+)
+print(response.choices[0].message.content)
 
 # ❌ Bad - incomplete example
 client = GROQ(api_key="key")

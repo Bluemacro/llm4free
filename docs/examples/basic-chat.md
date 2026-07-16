@@ -1,477 +1,202 @@
 # Basic Chat Examples
 
-> **Last updated:** 2026-01-24  
-> **Level:** Beginner  
-> **Time to learn:** 5 minutes
+> **Last updated:** 2026-07-16
+> **Audience:** Beginner · **Time to complete:** 5 minutes
 
-Simple question-answer patterns with LLM4Free providers.
-
----
+This page shows the simplest ways to chat with an AI model using LLM4Free. Every provider implements the OpenAI-compatible `chat.completions.create(...)` interface, so the code shape is identical across vendors.
 
 ## Table of Contents
 
-1. [Simplest Example](#simplest-example)
-2. [Different Providers](#different-providers)
-3. [Customizing Responses](#customizing-responses)
-4. [Saving Conversations](#saving-conversations)
-5. [Common Issues](#common-issues)
+1. [Using the unified Client](#using-the-unified-client)
+2. [Simplest example (no API key)](#simplest-example-no-api-key)
+3. [Different providers](#different-providers)
+4. [Customizing responses](#customizing-responses)
+5. [Saving and reusing conversations](#saving-and-reusing-conversations)
+6. [Using the unified Client (details)](#using-the-unified-client-details)
 
 ---
 
-## Simplest Example
+## Using the unified Client
 
-### No API Key Needed
+Start here. The unified `Client` is the recommended way to chat — it mirrors the OpenAI SDK, picks a working provider for you, and auto-fails over when one is down. Use `model="auto"` to let it choose, or `model="Provider/Model"` to force a specific backend.
 
 ```python
-from llm4free import Meta
+from llm4free.client import Client
 
-# Initialize the provider
-ai = Meta()
+# Let the client pick any working provider/model
+client = Client(print_provider_info=True)
+print(client.chat.completions.create(
+    model="auto",
+    messages=[{"role": "user", "content": "Tell me a fun fact about space."}],
+).choices[0].message.content)
 
-# Ask a question
-response = ai.chat("What is artificial intelligence?")
+# Force a specific provider/model
+print(client.chat.completions.create(
+    model="HeckAI/google/gemini-2.5-flash-preview",
+    messages=[{"role": "user", "content": "Hello!"}],
+).choices[0].message.content)
+print(client.chat.completions.last_provider)  # which provider was used
+```
 
-# Print the response
-print(response)
+> [!TIP]
+> `model="auto"` resolves a working provider/model for you; `model="HeckAI/google/gemini-2.5-flash-preview"` forces a specific backend. `print_provider_info=True` prints the chosen provider/model live. The raw-provider examples below are still valid, but the `Client` gives you auto-failover and model resolution for free.
+
+---
+
+## Simplest example (no API key)
+
+`HeckAI` is a free provider — no key required.
+
+```python
+from llm4free.llm.heckai import HeckAI
+
+client = HeckAI()
+response = client.chat.completions.create(
+    model="google/gemini-2.5-flash-preview",
+    messages=[{"role": "user", "content": "What is artificial intelligence?"}],
+)
+print(response.choices[0].message.content)
 ```
 
 **Output:**
+
 ```
-Artificial intelligence (AI) refers to computer systems designed to 
-perform tasks that typically require human intelligence. These tasks 
-include learning, reasoning, problem-solving, language understanding, 
-and visual perception...
-```
-
-### With an API Key
-
-```python
-from llm4free import OpenAI
-
-# Initialize with your API key
-client = OpenAI(api_key="sk-your-openai-api-key-here")
-
-# Ask a question
-response = client.chat("Explain machine learning simply")
-
-# Print the response
-print(response)
+Artificial intelligence (AI) refers to computer systems designed to perform
+tasks that typically require human intelligence — learning, reasoning,
+problem-solving, language understanding, and visual perception...
 ```
 
 ---
 
-## Different Providers
+## Different providers
 
-### Provider 1: GROQ (Fast & Free Tier)
+### HeckAI (free)
 
 ```python
-from llm4free import GROQ
+from llm4free.llm.heckai import HeckAI
 
-# Initialize - get key from https://console.groq.com/keys
-client = GROQ(api_key="gsk_your-groq-api-key-here")
-
-# Ask a question
-questions = [
-    "What is Python?",
-    "How does machine learning work?",
-    "Explain quantum computing",
-]
-
-for question in questions:
-    response = client.chat(question)
-    print(f"Q: {question}")
-    print(f"A: {response[:100]}...\n")
+client = HeckAI()
+print(client.chat.completions.create(
+    model="google/gemini-2.5-flash-preview",
+    messages=[{"role": "user", "content": "Hello!"}],
+).choices[0].message.content)
 ```
 
-### Provider 2: Google Gemini
+### ArtingAI (free)
 
 ```python
-from llm4free import GEMINI
+from llm4free.llm.artingai import ArtingAI
 
-# Initialize - get key from https://ai.google.dev/
-client = GEMINI(api_key="your-gemini-api-key-here")
-
-# Ask a question
-response = client.chat("What are neural networks?")
-print(response)
+client = ArtingAI()
+print(client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "Hello!"}],
+).choices[0].message.content)
 ```
 
-### Provider 3: Cohere
+### FreeAI (free)
 
 ```python
-from llm4free import Cohere
+from llm4free.llm.freeai import FreeAI
 
-# Initialize - get key from https://dashboard.cohere.com/
-client = Cohere(api_key="your-cohere-api-key-here")
-
-# Ask a question
-response = client.chat("What is natural language processing?")
-print(response)
+client = FreeAI()
+print(client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "Hello!"}],
+).choices[0].message.content)
 ```
 
-### Provider 4: OpenRouter (Multiple Models)
+### Groq (API key)
 
 ```python
-from llm4free import OpenRouter
+from llm4free.llm.Auth.groq import Groq
 
-# Initialize - get key from https://openrouter.ai/
-client = OpenRouter(api_key="your-openrouter-api-key-here")
+client = Groq(api_key="your-groq-key")
+print(client.chat.completions.create(
+    model="llama-3.3-70b-versatile",
+    messages=[{"role": "user", "content": "Explain machine learning simply"}],
+).choices[0].message.content)
+```
 
-# Ask a question with a specific model
-response = client.chat(
-    "Explain blockchain technology",
-    model="openai/gpt-3.5-turbo"
+### DeepInfra (API key)
+
+```python
+from llm4free.llm.Auth.deepinfra import DeepInfra
+
+client = DeepInfra(api_key="your-deepinfra-key")
+print(client.chat.completions.create(
+    model="meta-llama/Meta-Llama-3.1-8B-Instruct",
+    messages=[{"role": "user", "content": "What is Python?"}],
+).choices[0].message.content)
+```
+
+> [!NOTE]
+> The exact model strings accepted depend on the provider. Free providers map friendly names like `"gpt-4o"` to a backend model. Authenticated providers use the upstream model id (for example, Groq's `"llama-3.3-70b-versatile"` or DeepInfra's `"meta-llama/Meta-Llama-3.1-8B-Instruct"`).
+
+---
+
+## Customizing responses
+
+Standard OpenAI parameters are supported: `temperature`, `max_tokens`, `top_p`, and `tools`.
+
+```python
+from llm4free.llm.heckai import HeckAI
+
+client = HeckAI()
+response = client.chat.completions.create(
+    model="google/gemini-2.5-flash-preview",
+    messages=[
+        {"role": "system", "content": "You are a concise tutor."},
+        {"role": "user", "content": "Explain recursion in one sentence."},
+    ],
+    temperature=0.3,
+    max_tokens=120,
 )
-print(response)
+print(response.choices[0].message.content)
 ```
 
 ---
 
-## Customizing Responses
+## Saving and reusing conversations
 
-### Control Response Length
-
-```python
-from llm4free import GROQ
-
-client = GROQ(api_key="your-api-key")
-
-# Short response
-short = client.chat(
-    "What is AI?",
-    max_tokens=50  # Very brief answer
-)
-print("Short:", short)
-
-# Long response
-long = client.chat(
-    "Explain AI in detail",
-    max_tokens=500  # Comprehensive answer
-)
-print("Long:", long)
-```
-
-### Control Creativity (Temperature)
+Pass the full message list each call to keep context:
 
 ```python
-from llm4free import OpenAI
+from llm4free.llm.heckai import HeckAI
 
-client = OpenAI(api_key="your-api-key")
+client = HeckAI()
+messages = [{"role": "user", "content": "My name is Ada."}]
 
-# Deterministic - same answer every time (for facts)
-factual = client.chat(
-    "What is the capital of France?",
-    temperature=0.0  # 0 = deterministic
-)
-print("Factual:", factual)
+r1 = client.chat.completions.create(model="google/gemini-2.5-flash-preview", messages=messages)
+print(r1.choices[0].message.content)
 
-# Creative - diverse answers (for brainstorming)
-creative = client.chat(
-    "Come up with creative business ideas",
-    temperature=2.0  # 2 = very creative
-)
-print("Creative:", creative)
-```
-
-### Use System Prompts
-
-```python
-from llm4free import Meta
-
-# The library doesn't directly support custom system prompts,
-# but you can engineer your prompt:
-
-ai = Meta()
-
-# Engineer the prompt to get desired behavior
-system_instruction = "You are a Python expert. Answer all questions about Python."
-
-response = ai.chat(system_instruction + "\n\nHow do I read a file in Python?")
-print(response)
+# Append the assistant reply, then ask a follow-up
+messages.append({"role": "assistant", "content": r1.choices[0].message.content})
+messages.append({"role": "user", "content": "What was my name?"})
+r2 = client.chat.completions.create(model="google/gemini-2.5-flash-preview", messages=messages)
+print(r2.choices[0].message.content)
 ```
 
 ---
 
-## Saving Conversations
+## Using the unified Client (details)
 
-### Save to File
-
-```python
-from llm4free import GROQ
-from datetime import datetime
-
-client = GROQ(api_key="your-api-key")
-
-# List of questions
-conversations = [
-    ("What is Python?", ""),
-    ("How do I install it?", ""),
-    ("Give me a simple example", ""),
-]
-
-# Get responses and save
-for i, (question, _) in enumerate(conversations):
-    response = client.chat(question)
-    conversations[i] = (question, response)
-
-# Save to text file
-filename = f"conversation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-
-with open(filename, "w", encoding="utf-8") as f:
-    for question, answer in conversations:
-        f.write(f"Q: {question}\n")
-        f.write(f"A: {answer}\n")
-        f.write("-" * 80 + "\n")
-
-print(f"Conversation saved to {filename}")
-```
-
-### Save to JSON
+Forget provider names — let `Client` pick one and auto-fail over. Pass `model="auto"` for automatic selection, or `model="Provider/Model"` to force a specific backend.
 
 ```python
-import json
-from llm4free import Meta
+from llm4free.client import Client
 
-ai = Meta()
+client = Client(print_provider_info=True)
+print(client.chat.completions.create(
+    model="auto",
+    messages=[{"role": "user", "content": "Tell me a fun fact about space."}],
+).choices[0].message.content)
 
-# Create conversation
-conversation = []
-
-questions = ["Hello!", "How are you?", "What's your name?"]
-
-for question in questions:
-    response = ai.chat(question)
-    conversation.append({
-        "question": question,
-        "answer": response
-    })
-
-# Save to JSON
-with open("conversation.json", "w", encoding="utf-8") as f:
-    json.dump(conversation, f, indent=2, ensure_ascii=False)
-
-print("Saved to conversation.json")
-
-# Load and display
-with open("conversation.json", "r", encoding="utf-8") as f:
-    loaded = json.load(f)
-    for item in loaded:
-        print(f"Q: {item['question']}")
-        print(f"A: {item['answer']}\n")
+# Force a specific provider/model
+print(client.chat.completions.create(
+    model="HeckAI/google/gemini-2.5-flash-preview",
+    messages=[{"role": "user", "content": "Hello!"}],
+).choices[0].message.content)
 ```
 
----
-
-## Multi-Turn Conversations
-
-### Maintain Context
-
-```python
-from llm4free import Meta
-
-# Enable conversation mode to maintain context
-ai = Meta(is_conversation=True)
-
-# First turn
-print("You: My name is Alice")
-response1 = ai.chat("My name is Alice")
-print(f"AI: {response1}\n")
-
-# Second turn - AI remembers your name
-print("You: What is my name?")
-response2 = ai.chat("What is my name?")
-print(f"AI: {response2}\n")
-
-# The AI should reference "Alice" because context is preserved
-```
-
-**Note:** Not all providers support conversation mode. Check your provider's documentation.
-
----
-
-## Compare Providers
-
-### Find the Best Provider for Your Task
-
-```python
-from llm4free import Meta, GROQ, OpenAI
-
-# Simulate having different API keys
-providers = {
-    "Meta": lambda: Meta(),
-    "GROQ": lambda: GROQ(api_key="your-groq-key"),
-}
-
-question = "What is the best programming language to learn first?"
-
-print(f"Question: {question}\n")
-print("=" * 80)
-
-for name, init_provider in providers.items():
-    try:
-        provider = init_provider()
-        response = provider.chat(question)
-        
-        print(f"\n{name}:")
-        print(response[:200] + "...\n")
-        
-    except Exception as e:
-        print(f"\n{name}: Error - {e}\n")
-```
-
----
-
-## Error Handling
-
-### Safe Chat with Error Handling
-
-```python
-from llm4free import GROQ
-from llm4free.exceptions import AIProviderError
-
-def safe_chat(question: str, api_key: str) -> str:
-    """
-    Ask a question with error handling.
-    
-    Args:
-        question: The question to ask
-        api_key: API key for GROQ
-    
-    Returns:
-        The response, or error message if it fails
-    """
-    try:
-        client = GROQ(api_key=api_key)
-        response = client.chat(question)
-        return response
-    
-    except AIProviderError as e:
-        print(f"Provider error: {e}")
-        return f"Error: {e}"
-    
-    except TimeoutError:
-        print("Request timed out")
-        return "Error: Request timed out. Please try again."
-    
-    except Exception as e:
-        print(f"Unexpected error: {e}")
-        return f"Error: {e}"
-
-# Use it
-result = safe_chat(
-    "What is AI?",
-    api_key="your-api-key"
-)
-print(result)
-```
-
----
-
-## Example: Build a Simple Q&A Bot
-
-```python
-from llm4free import Meta
-
-def main():
-    """Simple Q&A bot using LLM4Free."""
-    
-    print("=" * 60)
-    print("Welcome to LLM4Free Q&A Bot")
-    print("Type 'quit' or 'exit' to stop")
-    print("=" * 60)
-    
-    ai = Meta()
-    
-    while True:
-        # Get user input
-        question = input("\nYou: ").strip()
-        
-        # Check for exit command
-        if question.lower() in ["quit", "exit", "q"]:
-            print("Goodbye!")
-            break
-        
-        # Skip empty input
-        if not question:
-            print("Please enter a question.")
-            continue
-        
-        # Get response
-        try:
-            response = ai.chat(question)
-            print(f"\nAI: {response}")
-        except Exception as e:
-            print(f"Error: {e}")
-
-if __name__ == "__main__":
-    main()
-```
-
-**Run it:**
-```bash
-python bot.py
-```
-
-**Sample interaction:**
-```
-==========================================
-Welcome to LLM4Free Q&A Bot
-Type 'quit' or 'exit' to stop
-==========================================
-
-You: Hello
-AI: Hello! How can I help you today?
-
-You: What is Python?
-AI: Python is a high-level, interpreted programming language...
-
-You: quit
-Goodbye!
-```
-
----
-
-## Common Issues
-
-### Issue: "ModuleNotFoundError: No module named 'llm4free'"
-
-**Fix:**
-```bash
-pip install -U llm4free
-```
-
-### Issue: "401 Unauthorized" with API key
-
-**Fix:** Check your API key:
-```python
-# Make sure there are no extra spaces
-api_key = "gsk_your_key_here"  # ✓ Good
-
-# Not
-api_key = "gsk_your_key_here " # ✗ Bad (trailing space)
-```
-
-### Issue: No response or empty response
-
-**Fix:**
-```python
-# Make sure you're using the right method
-response = ai.chat("question")  # ✓ chat()
-response = ai.Chat("question")  # ✗ Wrong method name (case-sensitive)
-```
-
----
-
-## Next Steps
-
-- Learn about [Streaming Responses](streaming-responses.md)
-- Explore [Error Handling](error-handling.md)
-- Read the [API Reference](../api-reference.md)
-
----
-
-## See Also
-
-- [Getting Started](../getting-started.md)
-- [API Reference](../api-reference.md)
-- [All Examples](README.md)
+See [client.md](../client.md) for the full reference and [streaming-responses.md](streaming-responses.md) for streaming.

@@ -1,370 +1,126 @@
 # Examples Hub
 
-> **Last updated:** 2026-01-24  
-> **Type:** Code Examples  
-> **Purpose:** Real-world usage patterns
+> Last updated: 2026-07-16
+> Type: Code Examples
+> Audience: Developers
 
-## Welcome to Examples
+This page is an index of the runnable examples shipped in this `docs/examples/` folder. Each example uses **verified** import paths (every provider is imported from `llm4free.llm.*` or `llm4free.client`).
 
-This section contains practical, production-ready code examples organized by use case. Each example is self-contained and can be used as a starting point for your own projects.
+> [!TIP]
+> **Recommended entry point: the unified `Client`.** For most use cases, start with `from llm4free.client import Client` and `client.chat.completions.create(model="auto", messages=[...])`. The `Client` picks a working provider/model automatically and fails over if one is down — no need to import individual provider classes. The examples below show both the unified `Client` and raw provider classes so you can choose the level of control you need. See [docs/client.md](../client.md) for the full reference.
 
----
+> [!NOTE]
+> All chat providers implement the OpenAI-compatible `chat.completions.create(...)` interface, so the code shape is identical across vendors. Free providers (`HeckAI`, `ArtingAI`) need no API key; auth-required providers (e.g. `Groq`, `DeepInfra`) take an `api_key`.
 
-## 📚 Example Categories
+## Table of Contents
 
-### Chat & Conversation
-
-Learn how to use LLM4Free for AI chat interactions:
-
-- **[Basic Chat](basic-chat.md)** — Simple question-answer examples
-- **[Streaming Responses](streaming-responses.md)** — Real-time response generation
-
-### Search & Information Retrieval
-
-Integrate web search into your applications:
-
-- **[Search](../search.md)** — DuckDuckGo, Bing, Brave, Yahoo, and other search engines
-- **[Search Integration](search-integration.md)** — Combine search results with AI analysis
-
-### Media Generation
-
-Create images and other media programmatically:
-
-- **[Text-to-Image](text-to-image.md)** — Generate images from descriptions
-- **[Text-to-Speech](text-to-speech.md)** — Convert text to audio
-
-### Reliability & Resilience
-
-Handle errors and failures gracefully:
-
-- **[Failover Patterns](failover-patterns.md)** — Automatic provider switching
-- **[Error Handling](error-handling.md)** — Robust error management
-- **[Retry & Timeout](retry-timeout.md)** — Resilient API calls
-
-### Advanced Patterns
-
-For experienced developers:
-
-- **[Custom Providers](custom-providers.md)** — Build your own provider
-- **[Batch Processing](batch-processing.md)** — Process multiple requests efficiently
-- **[Conversation Management](conversation-management.md)** — Multi-turn dialogues
-- **[Tool Calling](tool-calling.md)** — Function invocation with AI
-
-### Integration Patterns
-
-Connect LLM4Free with other systems:
-
-- **[FastAPI Integration](fastapi-integration.md)** — Build web APIs
-- **[CLI Applications](cli-applications.md)** — Command-line tools
-- **[Scheduled Tasks](scheduled-tasks.md)** — Recurring operations
+- [Available Examples](#available-examples)
+- [Quick Start](#quick-start)
+- [Provider Import Paths](#provider-import-paths)
+- [Related Resources](#related-resources)
 
 ---
 
-## 🚀 Quick Start Examples
+## Available Examples
 
-### Simplest Chat Example
+This folder currently contains two example guides:
+
+| Example | File | Description |
+| ------- | ---- | ----------- |
+| Basic Chat | [basic-chat.md](basic-chat.md) | Simplest ways to chat: free and keyed providers, customizing responses, conversation reuse, and the unified `Client`. |
+| Streaming Responses | [streaming-responses.md](streaming-responses.md) | Token-by-token streaming, processing and saving streamed output, and error handling. |
+
+> [!TIP]
+> For web search examples, see the standalone [Search guide](../search.md), which covers `DuckDuckGoSearch`, `BingSearch`, `BraveSearch`, `YahooSearch`, `Mojeek`, `Wikipedia`, and `SerpBase`.
+
+---
+
+## Quick Start
+
+### Simplest chat example (no API key)
 
 ```python
-from llm4free import Meta
+from llm4free.llm.heckai import HeckAI
 
 # Initialize (no API key needed)
-ai = Meta()
+client = HeckAI()
 
 # Ask a question
-response = ai.chat("What is Python?")
-print(response)
+response = client.chat.completions.create(
+    model="google/gemini-2.5-flash-preview",
+    messages=[{"role": "user", "content": "What is Python?"}],
+)
+print(response.choices[0].message.content)
 ```
 
-### With API Key
+### With API key
 
 ```python
-from llm4free import GROQ
+from llm4free.llm.Auth.groq import Groq
 
 # Initialize with your API key
-client = GROQ(api_key="your-groq-api-key")
+client = Groq(api_key="your-groq-api-key")
 
 # Get a response
-response = client.chat("Explain quantum computing")
-print(response)
+response = client.chat.completions.create(
+    model="llama-3.3-70b-versatile",
+    messages=[{"role": "user", "content": "Explain quantum computing"}],
+)
+print(response.choices[0].message.content)
 ```
 
-### With Streaming
+### With streaming
 
 ```python
-from llm4free import GROQ
+from llm4free.llm.Auth.groq import Groq
 
-client = GROQ(api_key="your-groq-api-key")
+client = Groq(api_key="your-groq-api-key")
 
 # Stream response in chunks
-for chunk in client.chat("Write a haiku", stream=True):
-    print(chunk, end="", flush=True)
+stream = client.chat.completions.create(
+    model="llama-3.3-70b-versatile",
+    messages=[{"role": "user", "content": "Write a haiku"}],
+    stream=True,
+)
+for chunk in stream:
+    delta = chunk.choices[0].delta.content
+    if delta:
+        print(delta, end="", flush=True)
 ```
 
----
-
-## 📖 Learning Path
-
-**New to LLM4Free?** Follow this sequence:
-
-1. **[Basic Chat](basic-chat.md)** — Learn the fundamentals
-2. **[Streaming Responses](streaming-responses.md)** — Handle long responses
-3. **[Search](../search.md)** — Add web search capability
-4. **[Failover Patterns](failover-patterns.md)** — Make it production-ready
-5. **[FastAPI Integration](fastapi-integration.md)** — Build a web app
-
----
-
-## 🔍 Find Examples By Use Case
-
-### "I want to..."
-
-| Goal | Example |
-|------|---------|
-| Ask simple questions | [Basic Chat](basic-chat.md) |
-| Generate long text | [Streaming Responses](streaming-responses.md) |
-| Search the web | [Search](../search.md) |
-| Create images | [Text-to-Image](text-to-image.md) |
-| Generate audio | [Text-to-Speech](text-to-speech.md) |
-| Handle errors | [Failover Patterns](failover-patterns.md) |
-| Process batches | [Batch Processing](batch-processing.md) |
-| Build a web API | [FastAPI Integration](fastapi-integration.md) |
-| Make CLI tools | [CLI Applications](cli-applications.md) |
-| Schedule jobs | [Scheduled Tasks](scheduled-tasks.md) |
-
----
-
-## 💡 Code Quality
-
-All examples:
-
-- ✅ Run without errors
-- ✅ Include error handling
-- ✅ Have comments explaining steps
-- ✅ Show expected output
-- ✅ Follow best practices
-- ✅ Use type hints
-
----
-
-## 🐍 Python Version Compatibility
-
-Minimum required: **Python 3.8+**
-
-Tested on:
-- Python 3.8
-- Python 3.9
-- Python 3.10
-- Python 3.11
-- Python 3.12
-
----
-
-## 📝 Using These Examples
-
-### Copy & Modify
+### With the unified Client
 
 ```python
-# 1. Copy the example code
-# 2. Replace placeholder values:
+from llm4free.client import Client
 
-# BEFORE (from example)
-client = GROQ(api_key="your-groq-api-key")
+client = Client()
 
-# AFTER (your code)
-import os
-client = GROQ(api_key=os.getenv("GROQ_API_KEY"))
-
-# 3. Run
-python your_script.py
-```
-
-### In Jupyter Notebooks
-
-```python
-# Install in notebook (if needed)
-!pip install llm4free
-
-# Import and use
-from llm4free import GROQ
-
-client = GROQ(api_key="your-key")
-response = client.chat("Hello")
-print(response)
-```
-
-### As a Module
-
-```python
-# save_as: my_chat_module.py
-from llm4free import Meta
-
-def ask_question(question: str) -> str:
-    ai = Meta()
-    return ai.chat(question)
-
-if __name__ == "__main__":
-    result = ask_question("What is AI?")
-    print(result)
-```
-
-```bash
-# Run
-python my_chat_module.py
+response = client.chat.completions.create(
+    model="auto",
+    messages=[{"role": "user", "content": "Hello!"}],
+)
+print(response.choices[0].message.content)
 ```
 
 ---
 
-## 🔗 Related Resources
+## Provider Import Paths
+
+Use these verified paths (the legacy `llm4free.Provider.Openai_comp.*` and top-level names like `Meta`/`GROQ`/`OpenAI` do **not** exist in this version):
+
+| Provider | Import |
+| -------- | ------ |
+| `HeckAI` (free) | `from llm4free.llm.heckai import HeckAI` |
+| `ArtingAI` (free) | `from llm4free.llm.artingai import ArtingAI` |
+| `Groq` (key) | `from llm4free.llm.Auth.groq import Groq` |
+| `DeepInfra` (key) | `from llm4free.llm.Auth.deepinfra import DeepInfra` |
+| Unified client | `from llm4free.client import Client` |
+
+---
+
+## Related Resources
 
 - [API Reference](../api-reference.md) — Complete API documentation
 - [Getting Started](../getting-started.md) — Quick start guide
 - [Troubleshooting](../troubleshooting.md) — Solutions to problems
-- [Provider Development](../provider-development.md) — Create custom providers
-
----
-
-## 📌 Common Patterns
-
-### Pattern 1: Simple Request-Response
-
-```python
-from llm4free import Meta
-
-question = "What is machine learning?"
-ai = Meta()
-answer = ai.chat(question)
-print(f"Q: {question}\nA: {answer}")
-```
-
-### Pattern 2: Error Handling
-
-```python
-from llm4free import GROQ
-from llm4free.exceptions import AIProviderError
-
-try:
-    client = GROQ(api_key="key")
-    response = client.chat("Hello")
-except AIProviderError as e:
-    print(f"Provider error: {e}")
-except Exception as e:
-    print(f"Error: {e}")
-```
-
-### Pattern 3: Streaming with Progress
-
-```python
-from llm4free import GROQ
-
-client = GROQ(api_key="key")
-print("Generating response...")
-
-for chunk in client.chat("Your prompt", stream=True):
-    print(chunk, end="", flush=True)
-print()  # Newline at end
-```
-
-### Pattern 4: Batch Processing
-
-```python
-from llm4free import GROQ
-
-client = GROQ(api_key="key")
-questions = ["Q1?", "Q2?", "Q3?"]
-
-for question in questions:
-    response = client.chat(question)
-    print(f"{question} → {response[:50]}...")
-```
-
----
-
-## 🎯 Example Complexity Levels
-
-### Level 1: Beginner
-
-- Simple API usage
-- No error handling needed for demo
-- Single provider
-- Synchronous code
-
-**Files:** basic-chat.md, [search.md](../search.md)
-
-### Level 2: Intermediate
-
-- Error handling
-- Multiple providers
-- Streaming
-- Conversation management
-
-**Files:** streaming-responses.md, failover-patterns.md
-
-### Level 3: Advanced
-
-- Custom providers
-- Async/background tasks
-- Integration with frameworks
-- Production patterns
-
-**Files:** custom-providers.md, fastapi-integration.md
-
----
-
-## 🚨 Before You Copy Code
-
-1. **API Keys:** Replace placeholder keys with real ones
-2. **Timeouts:** Adjust based on your network
-3. **Error Handling:** Add catches for your use case
-4. **Testing:** Run on sample data first
-5. **Documentation:** Update docstrings for clarity
-
----
-
-## 🤝 Contributing Examples
-
-Have a great example? Contribute it!
-
-1. Follow the format of existing examples
-2. Include error handling
-3. Add docstrings
-4. Test the code works
-5. Update this README
-6. Submit a PR
-
----
-
-## FAQ
-
-**Q: Can I use these examples commercially?**
-A: Yes, they're under the same license as LLM4Free.
-
-**Q: What if an example doesn't work?**
-A: Check [Troubleshooting](../troubleshooting.md) or open an issue.
-
-**Q: Can I modify examples for my use case?**
-A: Absolutely! They're templates meant to be customized.
-
-**Q: Where do I get API keys?**
-A: See [Getting Started](../getting-started.md#authentication-errors)
-
----
-
-## Index by Provider
-
-### Free (No API Key)
-
-- [Meta](basic-chat.md)
-
-### Requires API Key
-
-- [GROQ](streaming-responses.md)
-- [OpenAI](basic-chat.md)
-- [Cohere](search-integration.md)
-- [Google Gemini](text-to-image.md)
-
----
-
-Happy coding! 🚀
-
-For detailed guidance on each example, click the links above.
-
+- [Search Guide](../search.md) — Web search engines and usage

@@ -1,61 +1,102 @@
 # Streaming Responses
 
-> **Last updated:** 2026-01-24  
-> **Level:** Beginner  
-> **Time to learn:** 5 minutes
+> **Last updated:** 2026-07-16
+> **Audience:** Beginner · **Time to complete:** 5 minutes
 
-Handle long responses efficiently with streaming.
+Handle long responses efficiently with streaming. Streaming returns response tokens as they are generated instead of waiting for the full response to finish.
 
 ---
 
-## What is Streaming?
+## What is streaming?
 
-Streaming allows you to receive responses word-by-word or chunk-by-chunk instead of waiting for the entire response:
+Streaming lets you receive a response chunk-by-chunk instead of all at once:
 
 ```
 Non-streaming: WAIT... WAIT... [Complete response all at once]
-Streaming:     Word → by → word → as → it → arrives
+Streaming:     token → token → token → as → it → arrives
 ```
 
 **Benefits:**
-- Better user experience (shows progress)
-- Lower latency (start reading faster)
-- Smaller memory usage (don't store entire response)
+
+- Better user experience (shows progress immediately)
+- Lower perceived latency (start reading faster)
 - Works well for long responses
 
 ---
 
 ## Table of Contents
 
-1. [Basic Streaming](#basic-streaming)
-2. [Streaming with Different Providers](#streaming-with-different-providers)
-3. [Processing Streamed Data](#processing-streamed-data)
-4. [Saving Streamed Responses](#saving-streamed-responses)
-5. [Troubleshooting](#troubleshooting)
+1. [Basic streaming](#basic-streaming)
+2. [Streaming with different providers](#streaming-with-different-providers)
+3. [Processing streamed data](#processing-streamed-data)
+4. [Saving streamed responses](#saving-streamed-responses)
+5. [Error handling](#error-handling)
+6. [Troubleshooting](#troubleshooting)
 
 ---
 
-## Basic Streaming
+## Basic streaming
 
-### Simple Streaming Example
+### Stream with the unified Client (recommended)
+
+The unified `Client` is the easiest way to stream: pass `stream=True` with `model="auto"` and the client picks a working provider and automatically fails over if it is unavailable. No need to import a specific provider class.
 
 ```python
-from llm4free import GROQ
+from llm4free.client import Client
 
-client = GROQ(api_key="your-groq-api-key")
+client = Client(print_provider_info=True)
 
-# Enable streaming with stream=True
 print("AI Response:")
 print("-" * 40)
 
-for chunk in client.chat("Write a short poem about Python", stream=True):
-    print(chunk, end="", flush=True)
+# stream=True returns a generator of ChatCompletionChunk objects
+stream = client.chat.completions.create(
+    model="auto",
+    messages=[{"role": "user", "content": "Write a short poem about Python"}],
+    stream=True,
+)
 
-print()  # Newline at end
+for chunk in stream:
+    delta = chunk.choices[0].delta.content
+    if delta:
+        print(delta, end="", flush=True)
+
+print()
+print("-" * 40)
+```
+
+> [!TIP]
+> `chunk.choices[0].delta.content` may be `None` for chunks that only carry metadata (for example, the finish reason). Always guard with `if delta:` before printing.
+
+### Simple raw-provider streaming example
+
+Every LLM provider also exposes the same OpenAI-compatible `chat.completions.create(..., stream=True)` method directly. With `stream=True` the call returns a generator of `ChatCompletionChunk` objects.
+
+```python
+from llm4free.llm.heckai import HeckAI
+
+client = HeckAI()
+
+print("AI Response:")
+print("-" * 40)
+
+stream = client.chat.completions.create(
+    model="google/gemini-2.5-flash-preview",
+    messages=[{"role": "user", "content": "Write a short poem about Python"}],
+    stream=True,
+)
+
+for chunk in stream:
+    delta = chunk.choices[0].delta.content
+    if delta:
+        print(delta, end="", flush=True)
+
+print()
 print("-" * 40)
 ```
 
 **Output (real-time):**
+
 ```
 AI Response:
 ----------------------------------------
@@ -66,213 +107,243 @@ Libraries aplenty to choose from too.
 ----------------------------------------
 ```
 
-### Streaming vs Non-Streaming
+### Streaming vs non-streaming
 
 ```python
-from llm4free import GROQ
+from llm4free.llm.heckai import HeckAI
 import time
 
-client = GROQ(api_key="your-api-key")
+client = HeckAI()
 
 print("1. WITHOUT STREAMING (waits for complete response)")
 print("-" * 50)
 start = time.time()
-response = client.chat("Write a 100-word essay on AI")
+response = client.chat.completions.create(
+    model="google/gemini-2.5-flash-preview",
+    messages=[{"role": "user", "content": "Write a 100-word essay on AI"}],
+)
 elapsed = time.time() - start
-print(response[:100] + "...")
+print(response.choices[0].message.content[:100] + "...")
 print(f"Time: {elapsed:.1f}s\n")
 
 print("2. WITH STREAMING (starts immediately)")
 print("-" * 50)
 start = time.time()
-for chunk in client.chat("Write a 100-word essay on AI", stream=True):
-    print(chunk, end="", flush=True)
+stream = client.chat.completions.create(
+    model="google/gemini-2.5-flash-preview",
+    messages=[{"role": "user", "content": "Write a 100-word essay on AI"}],
+    stream=True,
+)
+for chunk in stream:
+    delta = chunk.choices[0].delta.content
+    if delta:
+        print(delta, end="", flush=True)
 elapsed = time.time() - start
 print(f"\nTime: {elapsed:.1f}s")
 ```
 
 ---
 
-## Streaming with Different Providers
+## Streaming with different providers
 
-### GROQ Streaming
+### HeckAI (free)
 
 ```python
-from llm4free import GROQ
+from llm4free.llm.heckai import HeckAI
 
-client = GROQ(api_key="your-groq-api-key")
+client = HeckAI()
 
-for chunk in client.chat("Hello, write something nice", stream=True):
-    print(chunk, end="", flush=True)
+stream = client.chat.completions.create(
+    model="google/gemini-2.5-flash-preview",
+    messages=[{"role": "user", "content": "Hello, write something nice"}],
+    stream=True,
+)
+for chunk in stream:
+    delta = chunk.choices[0].delta.content
+    if delta:
+        print(delta, end="", flush=True)
 print()
 ```
 
-### OpenAI Streaming
+### Groq (API key)
 
 ```python
-from llm4free import OpenAI
+from llm4free.llm.Auth.groq import Groq
 
-client = OpenAI(api_key="sk-your-openai-api-key")
+client = Groq(api_key="your-groq-api-key")
 
-for chunk in client.chat("Write a story", stream=True):
-    print(chunk, end="", flush=True)
+stream = client.chat.completions.create(
+    model="llama-3.3-70b-versatile",
+    messages=[{"role": "user", "content": "Write a short story"}],
+    stream=True,
+)
+for chunk in stream:
+    delta = chunk.choices[0].delta.content
+    if delta:
+        print(delta, end="", flush=True)
 print()
 ```
 
-### Check if Streaming is Supported
+### The unified Client (auto provider selection)
 
 ```python
-from llm4free import Meta, GROQ
-import types
+from llm4free.client import Client
 
-def check_streaming(provider, prompt: str):
-    """Check if a provider supports streaming."""
-    
-    response = provider.chat(prompt, stream=True)
-    
-    if isinstance(response, types.GeneratorType):
-        print("✓ Streaming supported")
-        # Consume the generator
-        list(response)
-    else:
-        print("✗ Streaming not supported (got direct response)")
+client = Client(print_provider_info=True)
 
-# Test
-check_streaming(Meta(), "Hello")
-check_streaming(GROQ(api_key="key"), "Hello")
+stream = client.chat.completions.create(
+    model="auto",
+    messages=[{"role": "user", "content": "Tell me a fun fact"}],
+    stream=True,
+)
+for chunk in stream:
+    delta = chunk.choices[0].delta.content
+    if delta:
+        print(delta, end="", flush=True)
+print()
 ```
 
 ---
 
-## Processing Streamed Data
+## Processing streamed data
 
-### Collect Into a String
+### Collect into a string
 
 ```python
-from llm4free import GROQ
+from llm4free.llm.heckai import HeckAI
 
-client = GROQ(api_key="your-api-key")
+client = HeckAI()
 
-# Collect all chunks into one string
+stream = client.chat.completions.create(
+    model="google/gemini-2.5-flash-preview",
+    messages=[{"role": "user", "content": "Write a poem"}],
+    stream=True,
+)
+
 full_response = ""
-for chunk in client.chat("Write a poem", stream=True):
-    full_response += chunk
+for chunk in stream:
+    delta = chunk.choices[0].delta.content
+    if delta:
+        full_response += delta
 
 print(f"Full response ({len(full_response)} chars):")
 print(full_response)
 ```
 
-### Count Words in Real-Time
+### Count words in real time
 
 ```python
-from llm4free import GROQ
+from llm4free.llm.heckai import HeckAI
 
-client = GROQ(api_key="your-api-key")
+client = HeckAI()
+
+stream = client.chat.completions.create(
+    model="google/gemini-2.5-flash-preview",
+    messages=[{"role": "user", "content": "Write an essay on machine learning"}],
+    stream=True,
+)
 
 word_count = 0
-for chunk in client.chat("Write an essay on machine learning", stream=True):
-    word_count += len(chunk.split())
-    print(chunk, end="", flush=True)
+for chunk in stream:
+    delta = chunk.choices[0].delta.content
+    if delta:
+        word_count += len(delta.split())
+        print(delta, end="", flush=True)
 
 print(f"\n\nTotal words: {word_count}")
 ```
 
-### Collect Words Into a List
+### Filter chunks
 
 ```python
-from llm4free import GROQ
+from llm4free.llm.heckai import HeckAI
 
-client = GROQ(api_key="your-api-key")
+client = HeckAI()
 
-words = []
-for chunk in client.chat("Count this", stream=True):
-    words.extend(chunk.split())
-    print(chunk, end="", flush=True)
+stream = client.chat.completions.create(
+    model="google/gemini-2.5-flash-preview",
+    messages=[{"role": "user", "content": "Discuss artificial intelligence"}],
+    stream=True,
+)
 
-print(f"\n\nWord list: {words}")
-print(f"Total: {len(words)} words")
-```
-
-### Process and Filter Chunks
-
-```python
-from llm4free import GROQ
-
-client = GROQ(api_key="your-api-key")
-
-print("Filtering chunks (only showing those with 'AI'):\n")
-
-for chunk in client.chat("Discuss artificial intelligence", stream=True):
-    # Only show chunks containing 'AI'
-    if "AI" in chunk or "intelligence" in chunk:
-        print(f"[{chunk}]", end="", flush=True)
+for chunk in stream:
+    delta = chunk.choices[0].delta.content
+    if not delta:
+        continue
+    if "AI" in delta or "intelligence" in delta:
+        print(f"[{delta}]", end="", flush=True)
     else:
-        print(chunk, end="", flush=True)
+        print(delta, end="", flush=True)
 
 print("\n")
 ```
 
 ---
 
-## Saving Streamed Responses
+## Saving streamed responses
 
-### Save to File While Streaming
+### Save to file while streaming
 
 ```python
-from llm4free import GROQ
+from llm4free.llm.heckai import HeckAI
 from datetime import datetime
 
-client = GROQ(api_key="your-api-key")
+client = HeckAI()
 
-# Create filename
 filename = f"response_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-
 print(f"Streaming to {filename}...\n")
 
-# Stream and save simultaneously
+stream = client.chat.completions.create(
+    model="google/gemini-2.5-flash-preview",
+    messages=[{"role": "user", "content": "Write about the future of technology"}],
+    stream=True,
+)
+
 with open(filename, "w", encoding="utf-8") as f:
-    for chunk in client.chat("Write about the future of technology", stream=True):
-        f.write(chunk)
-        print(chunk, end="", flush=True)
+    for chunk in stream:
+        delta = chunk.choices[0].delta.content
+        if delta:
+            f.write(delta)
+            print(delta, end="", flush=True)
 
 print(f"\n\nSaved to {filename}")
 
-# Verify file was created
-with open(filename, "r") as f:
+with open(filename, "r", encoding="utf-8") as f:
     content = f.read()
     print(f"File size: {len(content)} bytes")
 ```
 
-### Save Multiple Streams
+### Save multiple streams
 
 ```python
-from llm4free import GROQ
 import json
-from datetime import datetime
 
-client = GROQ(api_key="your-api-key")
+from llm4free.llm.heckai import HeckAI
+
+client = HeckAI()
 
 prompts = [
     "What is AI?",
     "Explain machine learning",
-    "Define deep learning"
+    "Define deep learning",
 ]
 
-# Store all responses
 responses = {}
-
 for prompt in prompts:
     print(f"\nProcessing: {prompt}")
-    
-    # Stream and collect
+    stream = client.chat.completions.create(
+        model="google/gemini-2.5-flash-preview",
+        messages=[{"role": "user", "content": prompt}],
+        stream=True,
+    )
     full_response = ""
-    for chunk in client.chat(prompt, stream=True):
-        full_response += chunk
-        print(chunk, end="", flush=True)
-    
+    for chunk in stream:
+        delta = chunk.choices[0].delta.content
+        if delta:
+            full_response += delta
+            print(delta, end="", flush=True)
     responses[prompt] = full_response
 
-# Save as JSON
 with open("responses.json", "w", encoding="utf-8") as f:
     json.dump(responses, f, indent=2, ensure_ascii=False)
 
@@ -281,206 +352,40 @@ print("\n\nAll responses saved to responses.json")
 
 ---
 
-## Streaming with Error Handling
+## Error handling
 
-### Handle Interrupted Streams
+### Handle interrupted streams
 
 ```python
-from llm4free import GROQ
+from llm4free.llm.Auth.groq import Groq
 
-client = GROQ(api_key="your-api-key", timeout=60)
+client = Groq(api_key="your-groq-api-key", timeout=60)
 
 full_response = ""
-
 try:
     print("Streaming response...")
-    for chunk in client.chat("Write a long story", stream=True):
-        full_response += chunk
-        print(chunk, end="", flush=True)
-    
-    print("\n✓ Stream completed successfully")
-
+    stream = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": "Write a long story"}],
+        stream=True,
+    )
+    for chunk in stream:
+        delta = chunk.choices[0].delta.content
+        if delta:
+            full_response += delta
+            print(delta, end="", flush=True)
+    print("\nStream completed successfully")
 except TimeoutError:
-    print("\n⚠ Stream interrupted by timeout")
+    print("\nStream interrupted by timeout")
     print(f"Partial response ({len(full_response)} chars received):")
     print(full_response)
-
 except Exception as e:
-    print(f"\n✗ Error during streaming: {e}")
+    print(f"\nError during streaming: {e}")
     print(f"Partial response received: {full_response[:100]}...")
 ```
 
-### Timeout Per Chunk
-
-```python
-from llm4free import GROQ
-import time
-
-client = GROQ(api_key="your-api-key")
-
-chunk_timeout = 10  # seconds per chunk
-last_chunk_time = time.time()
-times_out = False
-
-try:
-    for chunk in client.chat("Your prompt", stream=True):
-        current_time = time.time()
-        
-        if current_time - last_chunk_time > chunk_timeout:
-            print(f"\n⚠ No chunk received for {chunk_timeout}s - giving up")
-            times_out = True
-            break
-        
-        last_chunk_time = current_time
-        print(chunk, end="", flush=True)
-
-except Exception as e:
-    print(f"\nError: {e}")
-```
-
----
-
-## Advanced Streaming Patterns
-
-### Stream with Progress Bar
-
-Requires `tqdm` library:
-
-```bash
-pip install tqdm
-```
-
-```python
-from llm4free import GROQ
-from tqdm import tqdm
-import time
-
-client = GROQ(api_key="your-api-key")
-
-# Collect in background to get length
-chunks = []
-print("Buffering... ", end="", flush=True)
-for chunk in client.chat("Your prompt", stream=True):
-    chunks.append(chunk)
-print("ready!\n")
-
-# Display with progress bar
-with tqdm(total=len(chunks), desc="Displaying") as pbar:
-    for chunk in chunks:
-        print(chunk, end="", flush=True)
-        time.sleep(0.01)  # Simulate reading
-        pbar.update(1)
-
-print()
-```
-
-### Stream with Highlighting
-
-```python
-from llm4free import GROQ
-
-client = GROQ(api_key="your-api-key")
-
-print("Streaming response (keywords highlighted):\n")
-
-keywords = ["Python", "AI", "machine learning", "data"]
-
-for chunk in client.chat("Explain Python and AI", stream=True):
-    # Highlight keywords
-    highlighted = chunk
-    for keyword in keywords:
-        highlighted = highlighted.replace(
-            keyword,
-            f"\033[92m{keyword}\033[0m"  # Green highlight
-        )
-    
-    print(highlighted, end="", flush=True)
-
-print()
-```
-
-### Stream Multiple Responses in Parallel
-
-```python
-from llm4free import GROQ
-from threading import Thread
-
-client = GROQ(api_key="your-api-key")
-
-prompts = [
-    "What is Python?",
-    "Explain machine learning",
-]
-
-def stream_response(prompt: str, output_list: list):
-    """Stream a response to a list."""
-    response = ""
-    for chunk in client.chat(prompt, stream=True):
-        response += chunk
-    output_list.append(response)
-
-# Run both in parallel
-responses = [None, None]
-threads = []
-
-for i, prompt in enumerate(prompts):
-    t = Thread(target=lambda p=prompt, o=responses, idx=i: 
-               o.append(stream_response(p, [])) or o.pop(idx))
-    threads.append(t)
-    t.start()
-
-# Wait for completion
-for t in threads:
-    t.join()
-
-# Print results
-for prompt, response in zip(prompts, responses):
-    if response:
-        print(f"Q: {prompt}")
-        print(f"A: {response[:100]}...\n")
-```
-
----
-
-## Real-World Example: Chatbot with Streaming
-
-```python
-from llm4free import GROQ
-import sys
-
-def streaming_chatbot():
-    """Interactive chatbot that streams responses."""
-    
-    client = GROQ(api_key="your-api-key")
-    
-    print("=" * 60)
-    print("Streaming Chatbot")
-    print("Type 'quit' to exit")
-    print("=" * 60)
-    
-    while True:
-        # Get user input
-        user_input = input("\nYou: ").strip()
-        
-        if user_input.lower() in ["quit", "exit"]:
-            print("Goodbye!")
-            break
-        
-        if not user_input:
-            continue
-        
-        # Stream response
-        print("Bot: ", end="", flush=True)
-        try:
-            for chunk in client.chat(user_input, stream=True):
-                print(chunk, end="", flush=True)
-            print()  # Newline
-        except Exception as e:
-            print(f"\nError: {e}")
-
-if __name__ == "__main__":
-    streaming_chatbot()
-```
+> [!WARNING]
+> Free providers change frequently and may intermittently return errors or empty streams. Wrap streaming calls in `try/except` and keep the partial response so a failure mid-stream does not lose all progress.
 
 ---
 
@@ -488,56 +393,51 @@ if __name__ == "__main__":
 
 ### "No streaming data received"
 
-**Problem:** Response is not a generator
+**Problem:** The generator yields no usable content chunks.
 
-**Solution:**
+**Solution:** Iterate the stream and confirm `delta.content` is non-empty:
+
 ```python
-import types
+from llm4free.llm.heckai import HeckAI
 
-response = ai.chat("test", stream=True)
+client = HeckAI()
+stream = client.chat.completions.create(
+    model="google/gemini-2.5-flash-preview",
+    messages=[{"role": "user", "content": "test"}],
+    stream=True,
+)
 
-if not isinstance(response, types.GeneratorType):
-    print("Not streaming - provider doesn't support it")
-    print(f"Got: {type(response)}")
-    print(f"Response: {response}")
-```
-
-### "Generator is empty" or "No output"
-
-**Problem:** Generator is exhausted or provider returned error
-
-**Solution:**
-```python
-from llm4free import GROQ
-
-client = GROQ(api_key="your-api-key")
-
-# Check if you're iterating correctly
-response_gen = client.chat("test", stream=True)
-chunks = list(response_gen)
-
+chunks = [c.choices[0].delta.content for c in stream if c.choices[0].delta.content]
 if not chunks:
-    print("No chunks received")
+    print("No content chunks received")
 else:
     print(f"Received {len(chunks)} chunks")
-    for chunk in chunks:
-        print(chunk, end="")
+    print("".join(chunks))
 ```
 
 ### "Incomplete response while streaming"
 
-**Problem:** Connection interrupted
+**Problem:** Connection interrupted.
 
-**Solution:**
+**Solution:** Increase the timeout and capture the partial response:
+
 ```python
-from llm4free import GROQ
+from llm4free.llm.heckai import HeckAI
 
-client = GROQ(api_key="your-api-key", timeout=120)
+client = HeckAI()
+
+stream = client.chat.completions.create(
+    model="google/gemini-2.5-flash-preview",
+    messages=[{"role": "user", "content": "Long prompt"}],
+    stream=True,
+)
 
 full_response = ""
 try:
-    for chunk in client.chat("Long prompt", stream=True):
-        full_response += chunk
+    for chunk in stream:
+        delta = chunk.choices[0].delta.content
+        if delta:
+            full_response += delta
 except Exception as e:
     print(f"Stream interrupted: {e}")
     print(f"Partial response: {full_response}")
@@ -545,10 +445,10 @@ except Exception as e:
 
 ---
 
-## See Also
+## See also
 
 - [Basic Chat Examples](basic-chat.md)
 - [API Reference](../api-reference.md)
 - [Troubleshooting](../troubleshooting.md)
 
-Next: Learn about [Search](../search.md)
+Next: learn about [Search](../search.md)

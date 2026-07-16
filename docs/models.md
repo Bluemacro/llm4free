@@ -1,10 +1,22 @@
 # Model Registry (`llm4free/models.py`)
-> Last updated: 2025-12-20  
-> Maintained by: LLM4Free Core Team
+
+> **Last updated:** 2026-07-16
+> **Maintained by:** LLM4Free Core Team
 
 `llm4free/models.py` exposes a lightweight discovery layer so you can inspect the Large Language Model (LLM), Text-to-Speech (TTS), and Text-to-Image (TTI) offerings that ship with LLM4Free. The registry powers documentation examples (README, docs/search.md, etc.) and is useful when building UI selectors or performing health checks across providers.
 
-## 📦 Public API
+## Table of Contents
+
+- [Public API](#public-api)
+- [How It Works](#how-it-works)
+- [Example Usage](#example-usage)
+- [Returned Structures](#returned-structures)
+- [Extending the Registry](#extending-the-registry)
+- [Related Docs](#related-docs)
+
+---
+
+## Public API
 
 ```python
 from llm4free import model
@@ -12,25 +24,38 @@ from llm4free import model
 model.llm.list()       # Dict[str, List[str]] mapping provider -> models
 model.llm.get("Groq")  # List[str] of Groq models
 model.llm.summary()    # Counts per provider
+model.llm.providers()  # Detailed metadata per LLM provider
 
 model.tts.list()       # Dict[str, voices]
 model.tts.get("ElevenlabsTTS")
 model.tts.summary()
 
 model.tti.list()       # Dict[str, List[str]] for image providers
+model.tti.get("PollinationsAI")
 model.tti.providers()  # Detailed metadata per TTI provider
+model.tti.summary()
 ```
 
-The object exported from `llm4free/__init__.py` is a singleton that contains `llm`, `tts`, and `tti` namespaces.
+The object exported from `llm4free/__init__.py` is a singleton (`model`) that contains `llm`, `tts`, and `tti` namespaces.
 
-## 🧠 How It Works
+> [!NOTE]
+> The `model` registry is a **static** snapshot built at import time. For the **live, runtime-discovered** lists of providers currently importable (and their auth status), use the `Client` helper class methods — see [Live runtime discovery via the Client](#live-runtime-discovery-via-the-client). These two views complement each other: the registry documents the full catalog, while the `Client` helpers reflect what is actually loadable in your environment.
+> - `llm` supports `list()`, `get()`, `summary()`, `providers()`, and `provider(name)`.
+> - `tti` supports `list()`, `get()`, `summary()`, `providers()`, and `provider(name)`.
+> - `tts` supports `list()`, `get()`, and `summary()` only (no `providers()` method).
 
-- Uses `pkgutil.iter_modules` to walk through `llm4free/Provider` (for LLMs), `llm4free/Provider/TTS`, and `llm4free/Provider/TTI`.
-- Detects classes derived from the relevant base class (`Provider`, `TTSProvider`, `BaseImages`).
-- Prefers provider-defined metadata (e.g., `AVAILABLE_MODELS`, `get_models()`, `all_voices`). Sets are converted to lists for JSON friendliness.
-- Collects additional metadata such as docstrings, supported parameters, and module names.
+---
 
-## 🧾 Example Usage
+## How It Works
+
+- The LLM registry walks `llm4free.llm`, `llm4free.AISEARCH`, and `llm4free.STT`, collecting any subclass of `llm4free.AIbase.Provider` that exposes `AVAILABLE_MODELS` or a `get_models()` classmethod.
+- The TTS registry walks `llm4free.TTS`, collecting subclasses of `llm4free.AIbase.TTSProvider` that expose an `all_voices` attribute.
+- The TTI registry walks `llm4free.TTI`, collecting subclasses of `TTI.base.BaseImages` that expose `AVAILABLE_MODELS` or a `get_models()` classmethod.
+- Sets are converted to lists for JSON friendliness. Docstring first lines become `metadata["description"]`.
+
+---
+
+## Example Usage
 
 ```python
 from llm4free import model
@@ -45,19 +70,21 @@ for provider, count in summary['provider_model_counts'].items():
 # Enumerate voices
 voices = model.tts.list()
 print(f"TTS providers: {len(voices)}")
-print(f"Elevenlabs voices (first 5): {list(voices['ElevenLabsTTS'].items())[:5]}")
+print(f"Elevenlabs voices (first 5): {list(voices['ElevenlabsTTS'].items())[:5]}")
 
 # Discover TTI metadata
 print(f"TTI providers: {list(model.tti.list().keys())}")
 ```
 
-## 📊 Returned Structures
+---
+
+## Returned Structures
 
 ### `llm.list()`
 ```python
 {
   "Groq": ["gpt-4o-mini", "mixtral-8x7b"],
-  "Meta": ["llama-3-8b", ...],
+  "Apriel": ["Apriel-1.6-15B-Thinker"],
   ...
 }
 ```
@@ -69,14 +96,14 @@ print(f"TTI providers: {list(model.tti.list().keys())}")
   "models": 250,
   "provider_model_counts": {
     "Groq": 6,
-    "Meta": 4,
+    "Apriel": 1,
     ...
   }
 }
 ```
 
 ### `tts.list()`
-- Some providers return lists, others return `dict[str, str]` where the value is a voice ID.
+Some providers return lists, others return `dict[str, str]` where the value is a voice ID.
 
 ### `tti.providers()`
 ```python
@@ -94,14 +121,56 @@ print(f"TTI providers: {list(model.tti.list().keys())}")
 }
 ```
 
-## 🧩 Extending the Registry
+---
+
+## Extending the Registry
 
 1. **New provider class** – ensure it inherits from the correct base class (`Provider`, `TTSProvider`, or `BaseImages`).
 2. **Expose models/voices** – implement `get_models()` or set `AVAILABLE_MODELS` / `all_voices`.
 3. **Docstrings** – the first line becomes `metadata['description']`, so keep it meaningful.
 4. **Verify** – call `model.llm.list()` (or `tts.list()`, `tti.list()`) after adding a provider to confirm it appears.
 
-## 🔗 Related Docs
+---
+
+## Live runtime discovery via the Client
+
+The static `model` registry above enumerates every provider LLM4Free *ships with*. The `Client` class exposes complementary **runtime-discovered** lists that reflect exactly what is importable in the current environment at call time (after dynamic loading of `llm4free.llm`, `llm4free.TTI`, and `llm4free.TTS`):
+
+- `Client.get_chat_providers()` – all chat (OpenAI-compatible) provider names.
+- `Client.get_free_chat_providers()` – chat providers that need no API key.
+- `Client.get_image_providers()` – all text-to-image provider names.
+- `Client.get_tts_providers()` – all text-to-speech provider names.
+
+These mirror `model.llm.providers()`, `model.tti.providers()`, and `model.tts.list()` but are subtype-checked and available as plain class methods, so they pair naturally with the unified `Client` entry point.
+
+```python
+from llm4free.client import Client
+
+# Live, runtime-discovered provider lists (no instance needed — these are staticmethods)
+chat_providers = Client.get_chat_providers()
+free_chat = Client.get_free_chat_providers()
+image_providers = Client.get_image_providers()
+tts_providers = Client.get_tts_providers()
+
+print(f"{len(chat_providers)} chat providers, {len(free_chat)} free")
+print(f"Image providers: {image_providers}")
+print(f"TTS providers: {tts_providers}")
+
+# Use the discovery to drive the Client itself:
+client = Client()
+response = client.chat.completions.create(
+    model="auto",  # "auto" picks from the same providers listed above
+    messages=[{"role": "user", "content": "Hello!"}],
+)
+print(response.choices[0].message.content)
+```
+
+> [!TIP]
+> The same provider names returned here are what you pass to the `Client` and the server via the `Provider/Model` syntax — e.g. `client.chat.completions.create(model=f"{chat_providers[0]}/gpt-4o")`.
+
+---
+
+## Related Docs
 
 - [docs/client.md](client.md) – the unified client uses `_get_models_safely()` to enhance model resolution.
 - [Provider.md](../Provider.md) – cross-reference provider locations and normal vs OpenAI-compatible implementations.

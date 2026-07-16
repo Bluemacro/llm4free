@@ -1,9 +1,39 @@
 # LLM4Free Search Module
 
-> Last updated: 2026-03-30
-> Source: [`llm4free/search/`](../llm4free/search/)
+> Last updated: 2026-07-16
+> Audience: Developers integrating web search into Python applications
 
-LLM4Free's search module provides unified access to search engines through a consistent Python API and CLI. All engines return typed result dataclasses that support both attribute and dict-style access.
+LLM4Free's search module provides unified access to multiple search engines through a consistent Python API and CLI. All engines return typed result dataclasses that support both attribute and dict-style access.
+
+> [!TIP]
+> Prefer chat, image, or audio generation instead of search? Use the unified `Client`, which automatically picks any working provider/model (no provider wiring needed):
+> ```python
+> from llm4free.client import Client
+> client = Client()
+> client.chat.completions.create(model="auto", messages=[{"role": "user", "content": "Hello"}])
+> ```
+
+## Table of Contents
+
+- [Quick Start](#quick-start)
+- [Engine Capabilities](#engine-capabilities)
+- [Imports](#imports)
+- [Result Types](#result-types)
+- [DuckDuckGo](#duckduckgo)
+- [Bing](#bing)
+- [Brave](#brave)
+- [Yahoo](#yahoo)
+- [Low-Level Engines](#low-level-engines)
+- [CLI](#cli)
+- [Processing Results](#processing-results)
+- [Multi-Engine Search](#multi-engine-search)
+- [Combining Search with AI](#combining-search-with-ai)
+- [Error Handling](#error-handling)
+- [Custom Search Engine](#custom-search-engine)
+- [API Reference](#api-reference)
+- [Related Docs](#related-docs)
+
+---
 
 ## Quick Start
 
@@ -16,36 +46,51 @@ for r in results:
     print(f"{r['title']}: {r['href']}")
 ```
 
+> [!NOTE]
+> All results support both attribute access (`result.title`) and dict-style access (`result['title']`). URL aliases `link` and `url` both map to `href`.
+
+---
+
 ## Engine Capabilities
 
 | Category     | Engines                                                        |
 | ------------ | -------------------------------------------------------------- |
-| `text`       | DuckDuckGo, Bing, Brave, Yahoo, Mojeek, Wikipedia |
-| `images`     | DuckDuckGo, Bing, Brave, Yahoo                               |
-| `videos`     | DuckDuckGo, Brave, Yahoo                                       |
-| `news`       | DuckDuckGo, Bing, Brave, Yahoo                                 |
-| `suggestions`| DuckDuckGo, Bing, Brave, Yahoo                               |
+| `text`       | DuckDuckGo, Bing, Brave, Yahoo, Mojeek, Wikipedia, SerpBase    |
+| `images`     | DuckDuckGo, Bing, Brave, Yahoo, SerpBase                        |
+| `videos`     | DuckDuckGo, Brave, Yahoo                                        |
+| `news`       | DuckDuckGo, Bing, Brave, Yahoo                                  |
+| `suggestions`| DuckDuckGo, Bing, Brave, Yahoo                                 |
 | `weather`    | DuckDuckGo, Yahoo                                              |
 | `answers`    | DuckDuckGo                                                     |
 | `translate`  | DuckDuckGo                                                     |
 | `maps`       | DuckDuckGo                                                     |
 
+> [!WARNING]
+> `SerpBase` requires an API key (`required_auth = True`). All other engines work without authentication. The engine registry is defined in [`llm4free/search/__init__.py`](../../llm4free/search/__init__.py).
+
+---
+
 ## Imports
 
+The search engines are exported from the top-level package:
+
 ```python
-from llm4free.search import (
+from llm4free import (
     DuckDuckGoSearch,  # Full-featured: text, images, videos, news, maps, translate, weather, answers, suggestions
     BingSearch,        # Text, images, news, suggestions
     BraveSearch,       # Text, images, videos, news, suggestions
     YahooSearch,       # Text, images, videos, news, suggestions, weather
-    Mojeek,            # Text only
+    Mojeek,            # Text only (independent European engine)
     Wikipedia,         # Text only (encyclopedia)
+    SerpBase,          # Text, images (requires API key)
 )
 ```
 
+---
+
 ## Result Types
 
-All main interfaces (`DuckDuckGoSearch`, `BingSearch`, `BraveSearch`, `YahooSearch`) return typed dataclasses. Low-level engines (`Mojeek`, `Wikipedia`) return `TextResult`.
+The main interfaces (`DuckDuckGoSearch`, `BingSearch`, `BraveSearch`, `YahooSearch`, `SerpBase`) return typed dataclasses. Low-level engines (`Mojeek`, `Wikipedia`) return `TextResult`.
 
 ```python
 from llm4free.search.results import TextResult, ImagesResult, VideosResult, NewsResult
@@ -380,44 +425,6 @@ results = yahoo.suggestions("web dev", region="us")
 
 ---
 
-## Yep
-
-Privacy-focused, fast search.
-
-```python
-from llm4free import YepSearch
-
-yep = YepSearch()
-```
-
-### Text Search
-
-```python
-results = yep.text(
-    keywords="privacy online",
-    region="all",
-    safesearch="moderate",
-    max_results=10,
-)
-```
-
-### Image Search
-
-```python
-results = yep.images(
-    keywords="nature photography",
-    max_results=10,
-)
-```
-
-### Suggestions
-
-```python
-results = yep.suggestions("privacy", region="all")
-```
-
----
-
 ## Low-Level Engines
 
 These engines only support text search and are accessed via their `run()` method.
@@ -427,7 +434,7 @@ These engines only support text search and are accessed via their `run()` method
 Independent European search engine, privacy-first.
 
 ```python
-from llm4free.search import Mojeek
+from llm4free import Mojeek
 
 mojeek = Mojeek()
 results = mojeek.run("privacy tools", region="us-en", max_results=5)
@@ -438,12 +445,23 @@ results = mojeek.run("privacy tools", region="us-en", max_results=5)
 Encyclopedia search returning article summaries.
 
 ```python
-from llm4free.search import Wikipedia
+from llm4free import Wikipedia
 
 wiki = Wikipedia()
 results = wiki.run("Quantum Computing", region="us-en", max_results=3)
 for r in results:
     print(f"{r['title']}: {r['body'][:200]}")
+```
+
+### SerpBase
+
+SerpBase proxies a third-party search API and requires authentication.
+
+```python
+from llm4free import SerpBase
+
+serpbase = SerpBase(api_key="your-serpbase-key")
+results = serpbase.text("machine learning papers", max_results=5)
 ```
 
 ---
@@ -562,24 +580,32 @@ for r in results:
 
 ## Combining Search with AI
 
+> [!TIP]
+> The unified `Client` exposes OpenAI-compatible chat completions. Use a free provider such as `HeckAI` to summarize results — no API key required.
+
 ### Summarize Results
 
 ```python
-from llm4free import DuckDuckGoSearch, Meta
+from llm4free import DuckDuckGoSearch
+from llm4free.llm.heckai import HeckAI
 
 search = DuckDuckGoSearch()
 results = search.text("quantum computing", max_results=3)
 
 context = "\n".join(f"{r['title']}: {r['body']}" for r in results)
-ai = Meta()
-summary = ai.chat(f"Summarize these search results:\n{context}")
-print(summary)
+ai = HeckAI()
+response = ai.chat.completions.create(
+    model="auto",
+    messages=[{"role": "user", "content": f"Summarize these search results:\n{context}"}],
+)
+print(response.choices[0].message.content)
 ```
 
 ### Research Assistant
 
 ```python
-from llm4free import DuckDuckGoSearch, Meta
+from llm4free import DuckDuckGoSearch
+from llm4free.llm.heckai import HeckAI
 
 def research(query: str):
     search = DuckDuckGoSearch()
@@ -589,10 +615,13 @@ def research(query: str):
     for i, r in enumerate(results, 1):
         context += f"{i}. {r['title']}: {r['body'][:100]}...\n"
 
-    ai = Meta()
-    answer = ai.chat(f"{context}\nBased on these results, explain: {query}")
+    ai = HeckAI()
+    answer = ai.chat.completions.create(
+        model="auto",
+        messages=[{"role": "user", "content": f"{context}\nBased on these results, explain: {query}"}],
+    )
 
-    print(f"Answer: {answer}\n")
+    print(f"Answer: {answer.choices[0].message.content}\n")
     print("Sources:")
     for r in results:
         print(f"  {r['href']}")
@@ -603,15 +632,19 @@ research("how does photosynthesis work")
 ### News Analysis
 
 ```python
-from llm4free import DuckDuckGoSearch, GROQ
+from llm4free import DuckDuckGoSearch
+from llm4free.llm.heckai import HeckAI
 
 search = DuckDuckGoSearch()
 news = search.news("artificial intelligence", max_results=3)
 
 news_text = "\n".join(f"{item['title']}: {item['body']}" for item in news)
-client = GROQ(api_key="your-key")
-analysis = client.chat(f"Key takeaways from this news:\n{news_text}")
-print(analysis)
+ai = HeckAI()
+response = ai.chat.completions.create(
+    model="auto",
+    messages=[{"role": "user", "content": f"Key takeaways from this news:\n{news_text}"}],
+)
+print(response.choices[0].message.content)
 ```
 
 ---
@@ -644,7 +677,7 @@ for query in ["python", "javascript", "rust"]:
 
 ## Custom Search Engine
 
-Extend `BaseSearchEngine` to add a new engine:
+Extend `BaseSearchEngine` to add a new engine. The base class is generic over the result type (e.g. `TextResult`) and exposes class attributes for the request configuration.
 
 ```python
 from llm4free.search.base import BaseSearchEngine
@@ -719,14 +752,24 @@ results = engine.run("test query", max_results=5)
 | `suggestions` | `(keywords, region="us")`                            | `List[str]`           |
 | `weather`     | `(keywords)`                                         | `List[dict]`          |
 
+### SerpBase
+
+| Method        | Signature                                            | Returns               |
+| ------------- | ---------------------------------------------------- | --------------------- |
+| `text`        | `(keywords, max_results=None, **kwargs)`             | `List[TextResult]`   |
+| `images`      | `(keywords, max_results=None, **kwargs)`             | `List[ImagesResult]` |
+
+> [!WARNING]
+> `SerpBase` requires an API key passed to the constructor (`SerpBase(api_key="...")`).
+
 ### Low-Level Engines (Mojeek, Wikipedia)
 
 All share the same `run()` pattern:
 
-| Engine    | `run()` Signature                                         | Returns           |
-| --------- | --------------------------------------------------------- | ----------------- |
-| `Mojeek`  | `(*args, **kwargs)` — delegates to `search()`             | `List[TextResult]`|
-| `Wikipedia`| `(*args, **kwargs)` — delegates to `search()`            | `List[TextResult]`|
+| Engine      | `run()` Signature                                         | Returns           |
+| ----------- | --------------------------------------------------------- | ----------------- |
+| `Mojeek`    | `(*args, **kwargs)` — delegates to `search()`             | `List[TextResult]`|
+| `Wikipedia` | `(*args, **kwargs)` — delegates to `search()`            | `List[TextResult]`|
 
 ---
 

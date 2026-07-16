@@ -1,10 +1,10 @@
 # Tool Calling
 
-> **Last updated:** 2026-03-30
+> **Last updated:** 2026-07-16
 > **Status:** Current & maintained
 > **Target audience:** Developers building agentic AI applications
 
-## Quick Navigation
+## Table of Contents
 
 - [Overview](#overview)
 - [Creating Tools](#creating-tools)
@@ -18,20 +18,57 @@
 
 ## Overview
 
-LLM4Free provides a built-in tool calling system that lets any provider invoke
-Python functions during a conversation. The base `Provider` class handles the
-entire loop automatically — you define tools, pass them to the provider, and the
-model decides when to call them.
+LLM4Free provides a built-in tool calling system that lets a model invoke
+Python functions during a conversation. There are two complementary paths,
+depending on which provider base class you use.
 
 **Key concepts:**
 
-- **`Tool`** — a dataclass that wraps a name, description, parameters, and an
-  optional callable implementation.
-- **`register_tools()`** — stores tools on the provider instance so the
-  base class can find them.
-- **`chat(tools=[...])`** — the main entry point. When tools are present the
-  base class runs an automatic tool-calling loop (inject definitions into the
-  prompt, parse `<invoke>` blocks, execute tools, feed `<tool_result>` back).
+- **`Tool`** — a dataclass that wraps a name, description, parameter schema, and an optional callable implementation. It is defined in `llm4free/AIbase.py` and re-exported from `llm4free/llm`.
+- **`register_tools()`** — stores tools on the provider instance so the provider can find them.
+- **OpenAI-compatible providers** (`llm4free.llm.*`) — such as `Apriel`, `LLMChat`, `Toolbaz`, `HeckAI`. Pass tools to `provider.chat.completions.create(model=..., messages=..., tools=[...])`. The base class injects the tool definitions, parses `<invoke>` blocks, and returns native `tool_calls` in the response.
+- **Non-OpenAI providers** (subclasses of `llm4free.AIbase.Provider`) — these expose a convenience `chat(prompt, tools=[...])` method that runs a full automatic tool-calling loop (inject definitions, execute tools, feed `<tool_result>` back) and returns final text.
+
+> [!NOTE]
+> `Tool` is a standalone dataclass, **not** a method on the base class. Always import it explicitly: `from llm4free.AIbase import Tool`.
+> The OpenAI-compatible providers (`llm4free.llm`) do **not** have a `chat(prompt, tools=...)` method — use `chat.completions.create(tools=[...])` instead.
+
+---
+
+## Tool Calling Through the Unified Client
+
+Tool calling also works through the unified `Client`. Pass `tools=[...]` to `client.chat.completions.create(model="auto", messages=[...], tools=[...])` — the `Client` resolves the model to an OpenAI-compatible provider behind the scenes, then runs the standard tool loop and returns native `tool_calls`. This gives you auto-failover **and** function calling in one call.
+
+```python
+from llm4free.client import Client
+from llm4free.AIbase import Tool
+
+def get_weather(city: str) -> str:
+    return f"Weather in {city}: Sunny, 25C"
+
+weather_tool = Tool(
+    name="get_weather",
+    description="Get current weather for a city.",
+    parameters={
+        "city": {"type": "string", "description": "City name."},
+    },
+    implementation=get_weather,
+)
+
+client = Client(print_provider_info=True)
+response = client.chat.completions.create(
+    model="auto",
+    messages=[{"role": "user", "content": "What is the weather in London?"}],
+    tools=[weather_tool],
+)
+print(response.choices[0].message.tool_calls)
+```
+
+> [!TIP]
+> Prefer the unified `Client` for tool calling when you want automatic provider selection and failover. Use a raw provider class (e.g. `from llm4free.llm.apriel import Apriel`) when you need to pin a specific provider or register tools at init time.
+>
+> [!WARNING]
+> Streaming is disabled when tools are present on OpenAI-compatible providers. If you pass `stream=True` together with `tools=`, the provider silently ignores `stream` and returns a single `ChatCompletion` so it can inspect the full response before continuing the loop.
 
 ---
 
@@ -90,11 +127,10 @@ search_tool = Tool(
 
 ### Option A — at init time (recommended)
 
-Every LLM4Free provider accepts a `tools` parameter in its constructor. The
-tools are registered automatically.
+Every provider that supports tools accepts a `tools` parameter in its constructor. The tools are registered automatically.
 
 ```python
-from llm4free.Provider.Apriel import Apriel
+from llm4free.llm.apriel import Apriel
 from llm4free.AIbase import Tool
 
 def add(a: int, b: int) -> int:
@@ -121,17 +157,27 @@ ai.register_tools([calculator])
 ```
 
 Both approaches populate `ai.available_tools`, a `dict[str, Tool]` that the
-base class uses during the tool-calling loop.
+provider uses during the tool-calling loop.
+
+> [!NOTE]
+> The OpenAI-compatible provider constructor signature is
+> `OpenAICompatibleProvider(api_key=None, tools=None, proxies=None, **kwargs)`.
+> Tools passed at init time are stored but, for OpenAI-compatible providers, tool
+> execution is driven per-request via `chat.completions.create(tools=[...])`.
 
 ---
 
 ## Using Tools in Chat
 
-Once tools are registered you can call `chat()` normally. The base class
-detects the tools and runs the loop automatically.
+For OpenAI-compatible providers (`llm4free.llm.*`), pass tools to
+`chat.completions.create()`. The provider injects the tool definitions into the
+prompt, calls the model, and — when the model emits `<invoke>` blocks — returns a
+`ChatCompletion` whose `choices[0].message.tool_calls` are populated in the
+native OpenAI format. Your code is then responsible for executing the tools and
+making a follow-up call with the results (standard OpenAI pattern).
 
 ```python
-from llm4free.Provider.Apriel import Apriel
+from llm4free.llm.apriel import Apriel
 from llm4free.AIbase import Tool
 
 def get_weather(city: str) -> str:
@@ -146,65 +192,68 @@ weather_tool = Tool(
     implementation=get_weather,
 )
 
-ai = Apriel(tools=[weather_tool])
-
-# The model will decide whether to call get_weather
-response = ai.chat("What is the weather in London?")
-print(response)
+ai = Apriel()
+response = ai.chat.completions.create(
+    model="Apriel-1.6-15B-Thinker",
+    messages=[{"role": "user", "content": "What is the weather in London?"}],
+    tools=[weather_tool],
+)
+print(response.choices[0].message.tool_calls)
 ```
 
 ### Passing tools per-request
 
-You can also pass tools directly to `chat()` without registering them at
-init time:
+You can also pass tools directly to `chat.completions.create()` without registering them at init time (as shown above). The provider accepts both `Tool` instances and plain OpenAI-style `dict` definitions:
 
 ```python
 ai = Apriel()
-response = ai.chat(
-    "What is the weather in Paris?",
-    tools=[weather_tool],
+response = ai.chat.completions.create(
+    model="Apriel-1.6-15B-Thinker",
+    messages=[{"role": "user", "content": "What is the weather in Paris?"}],
+    tools=[
+        {
+            "type": "function",
+            "function": {
+                "name": "get_weather",
+                "description": "Get current weather for a city.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "city": {"type": "string", "description": "City name."}
+                    },
+                    "required": ["city"],
+                },
+            },
+        }
+    ],
 )
 ```
 
-### Controlling the loop
+> [!TIP]
+> For non-OpenAI providers (subclasses of `llm4free.AIbase.Provider`), you can use the convenience `chat()` loop instead:
+> `ai.chat("What is the weather in London?", tools=[weather_tool])`. This runs the entire
+> invoke → execute → feed-back loop automatically and returns the final text. This method
+> is **not** available on `llm4free.llm` OpenAI-compatible providers.
 
-```python
-response = ai.chat(
-    "What is the weather?",
-    tools=[weather_tool],
-    max_tool_rounds=3,      # max iterations (default: 5)
-)
-```
-
-> **Note:** `stream=True` is silently ignored when tools are present because
-> the loop needs to inspect the full response before deciding whether to
-> continue.
+> [!WARNING]
+> Streaming is disabled when tools are present on OpenAI-compatible providers. If you pass
+> `stream=True` together with `tools=`, the provider silently ignores `stream` and returns a
+> single `ChatCompletion` so it can inspect the full response before continuing the loop.
 
 ---
 
 ## How It Works Internally
 
-The automatic tool-calling loop in `Provider.chat()` follows these steps:
+For OpenAI-compatible providers, the tool loop in `BaseCompletions._run_non_native_tool_loop()` follows these steps:
 
 ```
-┌──────────────────────────────────────────────────────┐
-│  1. Format tool definitions as an XML instruction     │
-│     block and inject it into the prompt.              │
-│                                                       │
-│  2. Call provider.ask() with the enriched prompt.     │
-│                                                       │
-│  3. Parse the response for <invoke> blocks.           │
-│                                                       │
-│  4. If no <invoke> found → return response as final.  │
-│                                                       │
-│  5. Execute matching tools via Tool.execute().        │
-│                                                       │
-│  6. Format results as <tool_result> XML blocks.       │
-│                                                       │
-│  7. Append results to the conversation prompt.        │
-│                                                       │
-│  8. Go to step 2 (up to max_tool_rounds).             │
-└──────────────────────────────────────────────────────┘
+1. Parse the supplied tools into Tool objects (accepts both Tool and dict).
+2. Inject tool definitions as an XML instruction block into the (first) system message.
+3. Call provider.create() once with stream disabled, tools=None.
+4. Parse the response for <invoke> blocks.
+5. If no <invoke> found -> return the response verbatim as the final answer.
+6. If <invoke> found -> build native ToolCall objects in a ChatCompletion
+   with finish_reason="tool_calls" and return it for you to execute + follow up.
 ```
 
 ### XML format the model uses
@@ -218,7 +267,7 @@ The automatic tool-calling loop in `Provider.chat()` follows these steps:
 </invoke>
 ```
 
-**Tool result** (fed back to model):
+**Tool result** (fed back to model on the follow-up call):
 
 ```xml
 <tool_result>
@@ -229,6 +278,8 @@ The automatic tool-calling loop in `Provider.chat()` follows these steps:
 
 The model sees these in its conversation context and can chain multiple tool
 calls before producing a final text answer.
+
+For non-OpenAI providers, `Provider.run_tool_loop()` performs the equivalent loop internally and returns the final text directly.
 
 ---
 
@@ -243,6 +294,9 @@ calls before producing a final text answer.
 | `parameters`       | `Dict[str, Dict[str, Any]]`         | No       | Parameter schema (name → info dict). Default: `{}`.   |
 | `required_params`  | `Optional[List[str]]`               | No       | Required parameter names. Default: all parameters.    |
 | `implementation`   | `Optional[Callable[..., Any]]`      | No       | Python function that executes the tool.               |
+
+> [!NOTE]
+> `Tool` is defined in `llm4free/AIbase.py` (the `llm4free.AIbase.Provider` base class also uses it). A duplicate but identical `Tool` dataclass exists in `llm4free/llm/base.py` and is re-exported from `llm4free/llm`. Both are interchangeable; prefer `from llm4free.AIbase import Tool`.
 
 ### Parameter schema format
 
@@ -273,13 +327,13 @@ Each entry in `parameters` is a dict with at least `type` and `description`:
 
 ## Examples
 
-### Example 1 — Calculator
+### Example 1 — Calculator (OpenAI-compatible provider)
 
 ```python
 import ast
 import operator
 
-from llm4free.Provider.llmchat import LLMChat
+from llm4free.llm.llmchat import LLMChat
 from llm4free.AIbase import Tool
 
 SAFE_OPERATORS = {
@@ -329,14 +383,19 @@ calc_tool = Tool(
     implementation=calculate,
 )
 
-ai = LLMChat(tools=[calc_tool])
-print(ai.chat("What is 142 * 37?"))
+ai = LLMChat()
+response = ai.chat.completions.create(
+    model="auto",
+    messages=[{"role": "user", "content": "What is 142 * 37?"}],
+    tools=[calc_tool],
+)
+print(response.choices[0].message.tool_calls)
 ```
 
-### Example 2 — Multiple tools
+### Example 2 — Multiple tools (OpenAI-compatible provider)
 
 ```python
-from llm4free.Provider.Toolbaz import Toolbaz
+from llm4free.llm.toolbaz import Toolbaz
 from llm4free.AIbase import Tool
 import datetime
 
@@ -365,15 +424,22 @@ random_tool = Tool(
     implementation=get_random_number,
 )
 
-ai = Toolbaz(tools=[time_tool, random_tool])
-print(ai.chat("What time is it? And give me a random number between 1 and 50."))
+ai = Toolbaz()
+response = ai.chat.completions.create(
+    model="auto",
+    messages=[{"role": "user", "content": "What time is it? And give me a random number between 1 and 50."}],
+    tools=[time_tool, random_tool],
+)
+print(response.choices[0].message.tool_calls)
 ```
 
-### Example 3 — Web search stub
+### Example 3 — Web search stub (non-OpenAI provider loop)
+
+When you use a provider that subclasses `llm4free.AIbase.Provider`, you can let the
+`chat()` convenience method run the entire loop for you and return the final text:
 
 ```python
-from llm4free.Provider.Ayle import Ayle
-from llm4free.AIbase import Tool
+from llm4free.AIbase import Provider, Tool
 
 def web_search(query: str, num_results: int = 3) -> str:
     """Stub that simulates a web search."""
@@ -393,21 +459,26 @@ search_tool = Tool(
     implementation=web_search,
 )
 
-ai = Ayle(tools=[search_tool])
-print(ai.chat("Search for the latest news about Python 3.14"))
+# NOTE: only subclasses of llm4free.AIbase.Provider expose chat(prompt, tools=...).
+# For llm4free.llm OpenAI-compatible providers, pass tools to
+# chat.completions.create(...) instead (see Examples 1 and 2).
 ```
 
-### Example 4 — Streaming with tool results
+### Example 4 — Streaming without tool calls
 
-When tools are registered but the model doesn't call them, streaming works
-normally:
+When no tools are registered (or the model answers directly without calling a tool),
+streaming works normally on OpenAI-compatible providers:
 
 ```python
-ai = Ayle(tools=[search_tool])
+from llm4free.llm.apriel import Apriel
 
-# If the model answers directly (no tool call), streaming works
-for chunk in ai.chat("Tell me a joke", stream=True):
-    print(chunk, end="")
+# No tools -> streaming behaves as usual
+ai = Apriel()
+for chunk in ai.chat.completions.create(
+    model="Apriel-1.6-15B-Thinker",
+    messages=[{"role": "user", "content": "Tell me a joke"}],
+    stream=True,
+):
+    if chunk.choices and chunk.choices[0].delta.content:
+        print(chunk.choices[0].delta.content, end="")
 ```
-
-

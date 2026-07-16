@@ -257,7 +257,7 @@ For services that use OpenAI-like APIs:
 ### Step 1: Understand the Base Class
 
 ```python
-from llm4free.Provider.Openai_comp.base import OpenAICompatibleProvider
+from llm4free.llm.base import OpenAICompatibleProvider
 
 class YourOpenAIProvider(OpenAICompatibleProvider):
     """
@@ -309,7 +309,7 @@ class YourOpenAIProvider(OpenAICompatibleProvider):
         """
         Create a chat completion using OpenAI-compatible format.
         """
-        from llm4free.Provider.Openai_comp.utils import ChatCompletion
+        from llm4free.llm.utils import ChatCompletion
         
         url = f"{self.base_url}/chat/completions"
         
