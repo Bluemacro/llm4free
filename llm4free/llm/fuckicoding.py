@@ -121,6 +121,13 @@ class Completions(BaseCompletions):
                 raise IOError(f"FuckICoding request failed: {response.status_code}")
 
             content_type = response.headers.get("content-type", "")
+            if (
+                "text/html" in content_type
+                or response.headers.get("x-tengine-error") is not None
+            ):
+                raise IOError(
+                    "FuckICoding API is behind a WAF challenge or no longer accepts guest access"
+                )
             if "application/json" in content_type:
                 data = response.json()
                 if not data.get("success", True):
@@ -203,6 +210,8 @@ class Completions(BaseCompletions):
                 model=model,
                 usage=usage,
             )
+        except IOError:
+            raise
         except Exception as e:
             raise IOError(f"FuckICoding request failed: {e}") from e
 

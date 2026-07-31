@@ -1,3 +1,4 @@
+import json
 import re
 import time
 import uuid
@@ -32,6 +33,46 @@ def _extract_answer(text: str) -> str:
     text = re.sub(r"\[REASON_DONE\]", "", text)
     text = re.sub(r"\[REASON_START\]", "", text)
     return text.strip()
+
+
+_SKIP_MARKERS = {
+    "[ANSWER_START]",
+    "[ANSWER_DONE]",
+    "[ANSWER_END]",
+    "[RELATE_Q_START]",
+    "[RELATE_Q_DONE]",
+    "[SOURCE_START]",
+    "[SOURCE_DONE]",
+}
+
+
+def _parse_sse_payload(data: str) -> tuple:
+    """Parse a single ``data:`` payload.
+
+    Returns ``(content, error)`` where at most one is non-empty. Content lines may
+    be raw text, JSON strings, or JSON objects carrying ``text``/``content``/``c``.
+    Error objects (``error`` + ``message``) surface their message.
+    """
+    if data.startswith('"') and data.endswith('"'):
+        try:
+            data = json.loads(data)
+        except Exception:
+            pass
+    if isinstance(data, str) and data.startswith("{") and data.endswith("}"):
+        try:
+            obj = json.loads(data)
+        except Exception:
+            return data, None
+        if not isinstance(obj, dict):
+            return None, None
+        if obj.get("error") is not None and obj.get("message"):
+            return None, str(obj["message"])
+        for key in ("text", "content", "c"):
+            value = obj.get(key)
+            if isinstance(value, str):
+                return value, None
+        return None, None
+    return (str(data) if data else None), None
 
 
 class Completions(BaseCompletions):
@@ -89,6 +130,8 @@ class Completions(BaseCompletions):
         proxies: Optional[Dict[str, str]] = None,
     ) -> Generator[ChatCompletionChunk, None, None]:
         try:
+            self._client._ensure_session()
+            payload["sessionId"] = self._client.session_id
             response = self._client.session.post(
                 self._client.url,
                 json=payload,
@@ -98,7 +141,9 @@ class Completions(BaseCompletions):
             )
             response.raise_for_status()
 
-            full_text = ""
+            error_msg: Optional[str] = None
+            error_mode = False
+            buffering_reason = False
 
             for line in response.iter_lines():
                 if not line:
@@ -108,22 +153,42 @@ class Completions(BaseCompletions):
                 if not line.startswith("data: "):
                     continue
                 data = line[6:]
-                if data in (
-                    "[ANSWER_START]",
-                    "[ANSWER_DONE]",
-                    "[RELATE_Q_START]",
-                    "[RELATE_Q_DONE]",
+                stripped = data.strip()
+
+                if stripped == "[ERROR]":
+                    error_mode = True
+                    continue
+                if error_mode:
+                    try:
+                        obj = json.loads(data)
+                        if isinstance(obj, dict) and obj.get("message"):
+                            error_msg = str(obj["message"])
+                    except Exception:
+                        pass
+                    continue
+                if stripped == "[REASON_START]":
+                    buffering_reason = True
+                    continue
+                if stripped == "[REASON_DONE]":
+                    buffering_reason = False
+                    continue
+                if buffering_reason:
+                    continue
+                if stripped in _SKIP_MARKERS or (
+                    stripped.startswith("[") and stripped.endswith("]")
                 ):
                     continue
-                if data.startswith("[") and data.endswith("]"):
-                    continue
-                if data.startswith("{") or data.startswith('"'):
-                    continue
-                full_text += data
 
-            cleaned = _extract_answer(full_text)
-            if cleaned:
-                delta = ChoiceDelta(content=cleaned)
+                content, err = _parse_sse_payload(data)
+                if err:
+                    error_msg = err
+                    continue
+                if not content:
+                    continue
+                content = _extract_answer(content)
+                if not content:
+                    continue
+                delta = ChoiceDelta(content=content)
                 choice = Choice(index=0, delta=delta, finish_reason=None)
                 yield ChatCompletionChunk(
                     id=request_id,
@@ -131,6 +196,9 @@ class Completions(BaseCompletions):
                     created=created_time,
                     model=model,
                 )
+
+            if error_msg:
+                raise IOError(f"HeckAI request failed: {error_msg}")
 
             delta = ChoiceDelta(content=None)
             choice = Choice(index=0, delta=delta, finish_reason="stop")
@@ -154,8 +222,12 @@ class Completions(BaseCompletions):
         proxies: Optional[Dict[str, str]] = None,
     ) -> ChatCompletion:
         try:
+            self._client._ensure_session()
+            payload["sessionId"] = self._client.session_id
             answer_parts: List[str] = []
-            in_answer = False
+            error_msg: Optional[str] = None
+            error_mode = False
+            buffering_reason = False
             response = self._client.session.post(
                 self._client.url,
                 json=payload,
@@ -172,19 +244,43 @@ class Completions(BaseCompletions):
                 if not line.startswith("data: "):
                     continue
                 data = line[6:]
-                if data == "[ANSWER_START]":
-                    in_answer = True
-                    continue
-                if data == "[ANSWER_DONE]":
-                    in_answer = False
-                    continue
-                if data.startswith("[") and data.endswith("]"):
-                    continue
-                if in_answer:
-                    answer_parts.append(data)
+                stripped = data.strip()
 
-            full_text = "".join(answer_parts)
-            full_text = _extract_answer(full_text)
+                if stripped == "[ERROR]":
+                    error_mode = True
+                    continue
+                if error_mode:
+                    try:
+                        obj = json.loads(data)
+                        if isinstance(obj, dict) and obj.get("message"):
+                            error_msg = str(obj["message"])
+                    except Exception:
+                        pass
+                    continue
+                if stripped == "[REASON_START]":
+                    buffering_reason = True
+                    continue
+                if stripped == "[REASON_DONE]":
+                    buffering_reason = False
+                    continue
+                if buffering_reason:
+                    continue
+                if stripped in _SKIP_MARKERS or (
+                    stripped.startswith("[") and stripped.endswith("]")
+                ):
+                    continue
+
+                content, err = _parse_sse_payload(data)
+                if err:
+                    error_msg = err
+                    continue
+                if content:
+                    answer_parts.append(content)
+
+            if error_msg:
+                raise IOError(f"HeckAI request failed: {error_msg}")
+
+            full_text = _extract_answer("".join(answer_parts))
 
             prompt_tokens = count_tokens(payload.get("question", ""))
             completion_tokens = count_tokens(full_text)
@@ -202,6 +298,8 @@ class Completions(BaseCompletions):
                 model=model,
                 usage=usage,
             )
+        except IOError:
+            raise
         except Exception as e:
             print(f"{RED}Error during HeckAI non-stream request: {e}{RESET}")
             raise IOError(f"HeckAI request failed: {e}") from e
@@ -230,7 +328,9 @@ class HeckAI(OpenAICompatibleProvider):
         self.timeout = timeout
         self.language = language
         self.url = "https://api.heckai.weight-wave.com/api/ha/v1/chat"
+        self.session_url = "https://api.heckai.weight-wave.com/api/ha/v1/session/create"
         self.session_id = str(uuid.uuid4())
+        self._session_ready = False
 
         agent = LitAgent()
         self.headers = {
@@ -243,6 +343,21 @@ class HeckAI(OpenAICompatibleProvider):
         self.session = requests.Session()
         self.session.headers.update(self.headers)
         self.chat = Chat(self)
+
+    def _ensure_session(self) -> None:
+        if self._session_ready:
+            return
+        self._session_ready = True
+        try:
+            response = self.session.post(
+                self.session_url, json={"title": "Chat"}, timeout=self.timeout
+            )
+            data = response.json()
+            session_id = data.get("id")
+            if session_id:
+                self.session_id = session_id
+        except Exception:
+            pass
 
     def convert_model_name(self, model: str) -> str:
         if model in self.AVAILABLE_MODELS:

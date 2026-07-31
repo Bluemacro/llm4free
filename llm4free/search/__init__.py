@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, Set, Tuple, Type
+from typing import Dict, Set, Tuple, Type, cast
 
 from .base import BaseSearch, BaseSearchEngine
 from .bing_main import BingSearch
@@ -25,15 +25,18 @@ from .results import (
 from .yahoo_main import YahooSearch
 
 # Search engine registry: class name -> class object
-SEARCH_PROVIDERS: Dict[str, Type[BaseSearchEngine]] = {
-    "BingSearch": BingSearch,
-    "BraveSearch": BraveSearch,
-    "DuckDuckGoSearch": DuckDuckGoSearch,
-    "Mojeek": Mojeek,
-    "SerpBase": SerpBase,
-    "Wikipedia": Wikipedia,
-    "YahooSearch": YahooSearch,
-}
+SEARCH_PROVIDERS: Dict[str, Type[BaseSearchEngine]] = cast(
+    Dict[str, Type[BaseSearchEngine]],
+    {
+        "BingSearch": BingSearch,
+        "BraveSearch": BraveSearch,
+        "DuckDuckGoSearch": DuckDuckGoSearch,
+        "Mojeek": Mojeek,
+        "SerpBase": SerpBase,
+        "Wikipedia": Wikipedia,
+        "YahooSearch": YahooSearch,
+    },
+)
 
 # Search providers that require API authentication
 SEARCH_AUTH_REQUIRED: Set[str] = {

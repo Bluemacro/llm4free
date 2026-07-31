@@ -7,7 +7,6 @@
 # Base classes and utilities
 from llm4free.llm.ai4chat import AI4Chat
 from llm4free.llm.akashgpt import AkashGPT
-from llm4free.llm.apriel import Apriel
 from llm4free.llm.artingai import ArtingAI
 from llm4free.llm.Auth import (
     Cerebras,
@@ -109,8 +108,6 @@ __all__ = [
     "get_system_prompt",
     "get_last_user_message",
     "count_tokens",
-    # Provider implementations
-    "Apriel",
     "ArtingAI",
     "DeepAI",
     "EssentialAI",

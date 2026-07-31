@@ -95,15 +95,35 @@ class Completions(BaseCompletions):
                 raise IOError(f"EssentialAI stream failed: {resp.status_code}")
 
             last_full_text = ""
+            error_event = False
             for line in resp.iter_lines():
                 if not line:
                     continue
                 line_str = line.decode("utf-8") if isinstance(line, bytes) else line
+                if line_str.startswith("event: "):
+                    if line_str[7:].strip() == "error":
+                        error_event = True
+                    continue
                 if line_str.startswith("data: "):
+                    data = line_str[6:].strip()
+                    if error_event:
+                        try:
+                            parsed = json.loads(data)
+                        except Exception:
+                            parsed = data
+                        if isinstance(parsed, dict) and parsed.get("error"):
+                            raise IOError(
+                                f"EssentialAI request failed: {parsed['error']}"
+                            )
+                        if parsed is None:
+                            raise IOError(
+                                "EssentialAI request failed: Gradio endpoint returned an error"
+                            )
+                        raise IOError(f"EssentialAI request failed: {parsed}")
                     try:
-                        data = json.loads(line_str[6:])
-                        if isinstance(data, list) and len(data) > 0:
-                            current_full_text = data[0]
+                        obj = json.loads(data)
+                        if isinstance(obj, list) and len(obj) > 0:
+                            current_full_text = obj[0]
                             if isinstance(current_full_text, str):
                                 if current_full_text.startswith(last_full_text):
                                     delta_text = current_full_text[len(last_full_text) :]
@@ -160,6 +180,8 @@ class Completions(BaseCompletions):
                 usage=usage,
             )
             return completion
+        except IOError:
+            raise
         except Exception as e:
             raise IOError(f"EssentialAI request failed: {e}") from e
 

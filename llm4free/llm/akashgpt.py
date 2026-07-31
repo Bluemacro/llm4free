@@ -28,10 +28,8 @@ from llm4free.llm.utils import (
 
 # AkashGPT constants
 AVAILABLE_MODELS = [
-    "Qwen/Qwen3-30B-A3B",
-    "DeepSeek-V3.1",
-    "Meta-Llama-3-3-70B-Instruct",
-    "DeepSeek-V3.2",
+    "DeepSeek-V4-Flash"
+
 ]
 
 
@@ -432,7 +430,7 @@ if __name__ == "__main__":
     client = AkashGPT()
     print("NON-STREAMING RESPONSE:")
     response = client.chat.completions.create(
-        model="DeepSeek-V3.2",
+        model="DeepSeek-V4-Flash",
         messages=[
             {"role": "user", "content": "Hello, how are you?"},
         ],
@@ -440,7 +438,7 @@ if __name__ == "__main__":
     print(response)
     print("\nSTREAMING RESPONSE:")
     stream_response = client.chat.completions.create(
-        model="DeepSeek-V3.2",
+        model="DeepSeek-V4-Flash",
         messages=[
             {"role": "user", "content": "Hello, how are you?"},
         ],

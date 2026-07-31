@@ -16,8 +16,8 @@ try:
 
     has_cdp = True
 except ImportError:  # pragma: no cover - cdp is always present in this package
-    CDPSession = None  # type: ignore[assignment]
-    SyncCDPSession = None  # type: ignore[assignment]
+    CDPSession = None  # type: ignore
+    SyncCDPSession = None  # type: ignore
     has_cdp = False
 
 logger = logging.getLogger(__name__)
